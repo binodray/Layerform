@@ -18,7 +18,7 @@ public sealed record UpdateInfo(Version Version, Uri Installer, string? Sha256, 
 /// Installers are verified against their SHA-256 before they run.</summary>
 public static class Updater
 {
-    public const string WebsiteFeed = "https://layerform.hastamev.com/update.json";
+    public const string WebsiteFeed = "https://hastamev.com/layerform/update.json";
     public const string GitHubLatest = "https://api.github.com/repos/binodray/Layerform/releases/latest";
 
     private static readonly HttpClient Http = CreateClient();

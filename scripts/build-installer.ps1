@@ -18,7 +18,7 @@
 [CmdletBinding()]
 param(
     [string]$Iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    # The Hastamev website project that serves layerform.hastamev.com.
+    # The Hastamev website project that serves hastamev.com/layerform.
     [string]$WebsiteDir = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'HastamevWebsite')
 )
 

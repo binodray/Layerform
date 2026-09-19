@@ -17,7 +17,7 @@
 
 #define AppName "Layer Form"
 #define AppExe "LayerForm.exe"
-#define Website "https://layerform.hastamev.com"
+#define Website "https://hastamev.com/layerform"
 #define Repository "https://github.com/binodray/Layerform"
 
 [Setup]

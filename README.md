@@ -12,7 +12,7 @@
 
 ## Download
 
-**[Download Layer Form for Windows](https://layerform.hastamev.com)** — or grab `LayerForm-Setup-<version>.exe` from [GitHub Releases](https://github.com/binodray/Layerform/releases/latest).
+**[Download Layer Form for Windows](https://hastamev.com/layerform)** — or grab `LayerForm-Setup-<version>.exe` from [GitHub Releases](https://github.com/binodray/Layerform/releases/latest).
 
 The installer sets Layer Form up for your user account, with no administrator prompt. Layer Form then keeps itself current: when a new version is released it shows what's new and offers to download and install it, skip that version, or remind you later.
 

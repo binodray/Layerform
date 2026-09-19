@@ -15,7 +15,7 @@ The first public release, with a Windows installer and automatic updates.
 ### Added
 
 - **Windows installer** (`LayerForm-Setup-1.1.0.exe`). Installs for the current user without administrator rights, adds a Start menu shortcut and an optional desktop shortcut, and registers a standard uninstaller in Settings › Apps.
-- **Automatic updates.** Shortly after launch, Layer Form checks [layerform.hastamev.com](https://layerform.hastamev.com) and GitHub Releases for a newer version. When one is available it shows what's new and offers **Download and Install**, **Skip This Version** or **Later**. The download is verified against its SHA-256 checksum, Layer Form asks to save open projects, installs the update and reopens by itself.
+- **Automatic updates.** Shortly after launch, Layer Form checks [hastamev.com/layerform](https://hastamev.com/layerform) and GitHub Releases for a newer version. When one is available it shows what's new and offers **Download and Install**, **Skip This Version** or **Later**. The download is verified against its SHA-256 checksum, Layer Form asks to save open projects, installs the update and reopens by itself.
 - **Help › Check for Updates…** to check on demand.
 - **Help › Report a Bug…** opens a GitHub bug-report form with the Layer Form version and Windows build already filled in.
 - **Help › Request a Feature…** opens the GitHub feature-request form, so ideas land in the issue tracker with consistent labels.

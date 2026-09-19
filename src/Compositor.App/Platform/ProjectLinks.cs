@@ -8,7 +8,7 @@ namespace Compositor.App.Platform;
 /// the version and Windows fields already filled in, so reports arrive triaged.</summary>
 public static class ProjectLinks
 {
-    public const string Website = "https://layerform.hastamev.com";
+    public const string Website = "https://hastamev.com/layerform";
     public const string Repository = "https://github.com/binodray/Layerform";
     public const string Changelog = Repository + "/blob/main/CHANGELOG.md";
     public const string License = Repository + "/blob/main/LICENSE";

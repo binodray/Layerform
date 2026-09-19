@@ -7,7 +7,7 @@ A release is an installer on GitHub Releases plus an updated `update.json` on th
 ```text
 Layer Form (installed)
    │  on launch, and from Help › Check for Updates…
-   ├─► https://layerform.hastamev.com/update.json      ← HastamevWebsite public/layerform/update.json
+   ├─► https://hastamev.com/layerform/update.json      ← HastamevWebsite public/layerform/update.json
    └─► api.github.com/repos/binodray/Layerform/releases/latest
           │
           ▼  newest version wins; ignored if the user skipped it
@@ -47,19 +47,11 @@ Do step 7 **after** step 6: `update.json` points at the release asset, so it mus
 
 ## Website
 
-The download page is part of the [Hastamev website](https://github.com/binodray/HastamevWebsite) project (`src/pages/LayerForm.jsx`, assets in `public/layerform/`). One build serves both addresses:
+The download page lives at **<https://hastamev.com/layerform>**, in the [Hastamev website](https://github.com/binodray/HastamevWebsite) project (`src/pages/LayerForm.jsx`, assets and `update.json` in `public/layerform/`). The Tools page links to it.
 
-- **layerform.hastamev.com** shows only the Layer Form page, with its own header and footer.
-- **hastamev.com/layerform** shows the same page inside the main site; the Tools page links to it.
+Its download button and "What's new" section read `/layerform/update.json` — the same file the app checks — so they follow each release automatically. The site's `.htaccess` marks that file as not cacheable.
 
-The page's download button and "What's new" section read `/layerform/update.json`, so they follow each release automatically. The site's `.htaccess` serves that file at `layerform.hastamev.com/update.json`, the address the app checks, and marks it as not cacheable.
-
-One-time setup in cPanel (GoDaddy):
-
-1. **Domains › Create a New Domain** (older cPanel: **Subdomains**): enter `layerform.hastamev.com` and set its document root to **the same folder as hastamev.com** (usually `public_html`), so both names serve the same upload.
-2. **SSL/TLS Status:** run **AutoSSL** so `https://layerform.hastamev.com` gets a certificate.
-
-With DNS at GoDaddy on the same account, the subdomain's DNS record is created automatically. If `layerform.hastamev.com` doesn't resolve within an hour, add an `A` record named `layerform` with the same IP address as `hastamev.com`.
+A `layerform.hastamev.com` subdomain was tried first and dropped: GoDaddy only issues certificates for the main domain on this plan, and the app requires HTTPS. Anything that moves the page needs `Updater.WebsiteFeed` and `ProjectLinks.Website` updated in the app, which means a new release.
 
 ## Code signing
 
