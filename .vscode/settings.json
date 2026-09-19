@@ -1,0 +1,10 @@
+{
+  "dotnet.defaultSolution": "LayerForm.sln",
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    ".dotnet-home": true,
+    ".nuget": true,
+    "CompositorWindowsStage": true
+  }
+}

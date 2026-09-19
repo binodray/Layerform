@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Layer Form (debug)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build app",
+      "program": "${workspaceFolder}/src/Compositor.App/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64/LayerForm.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/Compositor.App/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64",
+      "console": "internalConsole",
+      "stopAtEntry": false,
+      "justMyCode": true
+    },
+    {
+      "name": "Layer Form (debug, open a project)",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build app",
+      "program": "${workspaceFolder}/src/Compositor.App/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64/LayerForm.exe",
+      "args": ["${input:projectPath}"],
+      "cwd": "${workspaceFolder}/src/Compositor.App/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64",
+      "console": "internalConsole",
+      "justMyCode": true
+    }
+  ],
+  "inputs": [
+    { "id": "projectPath", "type": "promptString", "description": "Path to a .comp project folder or image file" }
+  ]
+}

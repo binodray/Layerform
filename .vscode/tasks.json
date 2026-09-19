@@ -1,0 +1,44 @@
+{
+  // scripts/dotnet.ps1 uses the workspace SDK when present and otherwise the system .NET 8 SDK.
+  "version": "2.0.0",
+  "options": {
+    "env": {
+      "DOTNET_CLI_HOME": "${workspaceFolder}\\.dotnet-home",
+      "DOTNET_NOLOGO": "1",
+      "DOTNET_CLI_TELEMETRY_OPTOUT": "1"
+    }
+  },
+  "tasks": [
+    {
+      "label": "build app",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\scripts\\dotnet.ps1", "build", "src/Compositor.App/Compositor.App.csproj", "-c", "Debug", "-p:Platform=x64", "-nologo", "-v", "q"],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Run current Layer Form",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command",
+        "Start-Process -FilePath '${workspaceFolder}\\src\\Compositor.App\\bin\\x64\\Debug\\net8.0-windows10.0.19041.0\\win-x64\\LayerForm.exe'"
+      ],
+      "dependsOn": "build app",
+      "dependsOrder": "sequence",
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "run tests",
+      "type": "process",
+      "command": "powershell.exe",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\scripts\\dotnet.ps1", "test", "tests/Compositor.Core.Tests", "-nologo"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": "$msCompile"
+    }
+  ]
+}

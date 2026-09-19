@@ -1,0 +1,50 @@
+# Build output
+**/bin/
+**/obj/
+artifacts/
+dist/
+publish/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Local .NET/NuGet state
+.dotnet-home/
+.nuget/
+.packages/
+
+# IDE and user-specific files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+
+# Local application state and logs
+.appdata/
+*.log
+*.dmp
+
+# Packaging and scratch work
+CompositorWindowsStage/
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+*.cer
+*.pfx
+*.snk
+*.zip
+*.7z
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+

@@ -1,0 +1,12 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="150" y1="80" x2="850" y2="950" gradientUnits="userSpaceOnUse"><stop stop-color="#182132"/><stop offset="1" stop-color="#0C111C"/></linearGradient>
+    <linearGradient id="bottom" x1="280" y1="600" x2="760" y2="850" gradientUnits="userSpaceOnUse"><stop stop-color="#5268FF"/><stop offset="0.55" stop-color="#3347F2"/><stop offset="1" stop-color="#4937F0"/></linearGradient>
+    <linearGradient id="middle" x1="250" y1="485" x2="790" y2="690" gradientUnits="userSpaceOnUse"><stop stop-color="#22D2E8"/><stop offset="0.45" stop-color="#159CF4"/><stop offset="1" stop-color="#2788F8"/></linearGradient>
+    <linearGradient id="top" x1="330" y1="315" x2="700" y2="600" gradientUnits="userSpaceOnUse"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#EAF5FF"/></linearGradient>
+  </defs>
+  <rect x="28" y="28" width="968" height="968" rx="205" fill="url(#bg)"/>
+  <path d="M196 650 Q174 636 196 621 L468 466 Q512 441 556 466 L828 621 Q850 636 828 650 L556 806 Q512 831 468 806 Z" fill="url(#bottom)"/>
+  <path d="M196 521 Q174 507 196 492 L468 337 Q512 312 556 337 L828 492 Q850 507 828 521 L556 677 Q512 702 468 677 Z" fill="url(#middle)"/>
+  <path d="M196 393 Q174 378 196 364 L468 209 Q512 184 556 209 L828 364 Q850 378 828 393 L556 549 Q512 574 468 549 Z" fill="url(#top)"/>
+</svg>

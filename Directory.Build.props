@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591;NETSDK1206</NoWarn>
+    <Company>Layer Form contributors</Company>
+    <Copyright>Copyright (c) 2026 Wonder Assembly LLC (original Compositor); Layer Form contributors</Copyright>
+    <Version>1.0.4</Version>
+  </PropertyGroup>
+</Project>
