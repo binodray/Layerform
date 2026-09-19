@@ -5,7 +5,8 @@
 .DESCRIPTION
     1. Publishes a self-contained Release build of the app for win-x64.
     2. Compiles installer\LayerForm.iss with Inno Setup 6 into artifacts\installer.
-    3. Writes site\update.json, which installed copies of Layer Form read to find updates.
+    3. Writes update.json, which installed copies of Layer Form read to find updates, into
+       artifacts\ and into the Hastamev website project (public\layerform\update.json).
        Its download URL points at the installer attached to the matching GitHub release.
 
     The version comes from Directory.Build.props; release notes come from that version's
@@ -16,7 +17,9 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$Iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+    [string]$Iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+    # The Hastamev website project that serves layerform.hastamev.com.
+    [string]$WebsiteDir = (Join-Path (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)) 'HastamevWebsite')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -70,24 +73,21 @@ $feed = [ordered]@{
     released = (Get-Date -Format 'yyyy-MM-dd')
     notes    = $notes.Trim()
 }
-$feedPath = Join-Path $root 'site\update.json'
-[IO.File]::WriteAllText($feedPath, ($feed | ConvertTo-Json) + "`n", [Text.UTF8Encoding]::new($false))
-
-# The website as one zip for the hosting file manager. tar writes forward-slash paths,
-# which Linux hosts need; PowerShell 5's Compress-Archive writes backslashes.
-$siteZip = Join-Path $root 'artifacts\layerform-site.zip'
-if (Test-Path $siteZip) { Remove-Item $siteZip -Force }
-Push-Location (Join-Path $root 'site')
-try { tar.exe -a -c -f $siteZip .htaccess index.html update.json favicon.png assets }
-finally { Pop-Location }
-if ($LASTEXITCODE -ne 0) { throw 'Could not create the website zip.' }
+$json = ($feed | ConvertTo-Json) + "`n"
+$feedPath = Join-Path $root 'artifacts\update.json'
+[IO.File]::WriteAllText($feedPath, $json, [Text.UTF8Encoding]::new($false))
+# The download page lives in the Hastamev website project; keep its copy of the feed current.
+$websiteFeed = Join-Path $WebsiteDir 'public\layerform\update.json'
+if (Test-Path (Split-Path $websiteFeed)) {
+    [IO.File]::WriteAllText($websiteFeed, $json, [Text.UTF8Encoding]::new($false))
+    $feedPath = $websiteFeed
+}
 
 Write-Host ''
 Write-Host "Installer : $setup ($([math]::Round($size / 1MB, 1)) MB)" -ForegroundColor Green
 Write-Host "SHA-256   : $sha256"
 Write-Host "Feed      : $feedPath"
-Write-Host "Website   : $siteZip"
 Write-Host ''
 Write-Host 'To publish:'
 Write-Host "  1. Create GitHub release v$version and attach $setupName."
-Write-Host '  2. Upload update.json (or the whole website zip) to layerform.hastamev.com.'
+Write-Host '  2. Build the Hastamev website (npm run build) and upload dist/ to hastamev.com.'

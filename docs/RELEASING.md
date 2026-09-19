@@ -1,13 +1,13 @@
 # Releasing Layer Form
 
-A release is an installer on GitHub Releases plus an updated `site/update.json`. Installed copies of Layer Form read that feed (and the latest GitHub release) shortly after launch and offer the update to the user.
+A release is an installer on GitHub Releases plus an updated `update.json` on the website. Installed copies of Layer Form read that feed (and the latest GitHub release) shortly after launch and offer the update to the user.
 
 ## How updates reach users
 
 ```text
 Layer Form (installed)
    │  on launch, and from Help › Check for Updates…
-   ├─► https://layerform.hastamev.com/update.json      ← site/update.json, uploaded to cPanel
+   ├─► https://layerform.hastamev.com/update.json      ← HastamevWebsite public/layerform/update.json
    └─► api.github.com/repos/binodray/Layerform/releases/latest
           │
           ▼  newest version wins; ignored if the user skipped it
@@ -30,7 +30,7 @@ The installer is per-user (`%LOCALAPPDATA%\Programs\Layer Form`), so updates nev
    .\scripts\build-installer.ps1
    ```
 
-   This publishes a self-contained Release build, compiles `artifacts\installer\LayerForm-Setup-x.y.z.exe` with [Inno Setup 6](https://jrsoftware.org/isdl.php), and rewrites `site\update.json` with the version, download URL, SHA-256 and release notes.
+   This publishes a self-contained Release build, compiles `artifacts\installer\LayerForm-Setup-x.y.z.exe` with [Inno Setup 6](https://jrsoftware.org/isdl.php), and writes `update.json` (to `artifacts\` and the Hastamev website project) with the version, download URL, SHA-256 and release notes.
 4. **Smoke-test** the installer on a clean account or VM: install, launch, open and save a project, uninstall.
 5. **Commit and tag:**
 
@@ -41,21 +41,25 @@ The installer is per-user (`%LOCALAPPDATA%\Programs\Layer Form`), so updates nev
    ```
 
 6. **Publish the GitHub release** for tag `vx.y.z`, paste the changelog section as the description, and attach `LayerForm-Setup-x.y.z.exe`. The file name must contain `Setup` and end in `.exe`.
-7. **Update the website.** In cPanel › File Manager, open the `layerform.hastamev.com` folder and upload the new `site/update.json`, replacing the old one. (If the page itself changed, upload `artifacts/layerform-site.zip` and extract it instead.)
+7. **Update the website.** The build script has already written the new feed to `HastamevWebsite/public/layerform/update.json`. In the website project run `npm run build` and upload `dist/` to hastamev.com as usual.
 
 Do step 7 **after** step 6: `update.json` points at the release asset, so it must never go live before the installer exists.
 
 ## Website
 
-`site/` is the download page for [layerform.hastamev.com](https://layerform.hastamev.com), hosted on the hastamev.com GoDaddy cPanel account. Its download button and "What's new" section read `update.json`, so they update with each release automatically. `site/.htaccess` forces HTTPS and stops `update.json` from being cached.
+The download page is part of the [Hastamev website](https://github.com/binodray/HastamevWebsite) project (`src/pages/LayerForm.jsx`, assets in `public/layerform/`). One build serves both addresses:
 
-One-time setup in cPanel:
+- **layerform.hastamev.com** shows only the Layer Form page, with its own header and footer.
+- **hastamev.com/layerform** shows the same page inside the main site; the Tools page links to it.
 
-1. **Domains › Create a New Domain** (older cPanel: **Subdomains**): enter `layerform.hastamev.com`, keep the suggested document root (for example `public_html/layerform.hastamev.com`) and uncheck "Share document root".
-2. **File Manager:** open that document root, **Upload** `artifacts/layerform-site.zip`, then right-click it › **Extract**, and delete the zip. Turn on *Settings › Show Hidden Files* to confirm `.htaccess` is there.
-3. **SSL/TLS Status:** run **AutoSSL** so `https://layerform.hastamev.com` gets a certificate (can take a few minutes).
+The page's download button and "What's new" section read `/layerform/update.json`, so they follow each release automatically. The site's `.htaccess` serves that file at `layerform.hastamev.com/update.json`, the address the app checks, and marks it as not cacheable.
 
-When hastamev.com's DNS is managed by GoDaddy on the same account, the subdomain's DNS record is created automatically. If `layerform.hastamev.com` doesn't resolve after an hour, add an `A` record named `layerform` pointing to the hosting IP shown in cPanel (currently the same address as `hastamev.com`).
+One-time setup in cPanel (GoDaddy):
+
+1. **Domains › Create a New Domain** (older cPanel: **Subdomains**): enter `layerform.hastamev.com` and set its document root to **the same folder as hastamev.com** (usually `public_html`), so both names serve the same upload.
+2. **SSL/TLS Status:** run **AutoSSL** so `https://layerform.hastamev.com` gets a certificate.
+
+With DNS at GoDaddy on the same account, the subdomain's DNS record is created automatically. If `layerform.hastamev.com` doesn't resolve within an hour, add an `A` record named `layerform` with the same IP address as `hastamev.com`.
 
 ## Code signing
 
