@@ -31,8 +31,7 @@ public static class AboutDialog
             "SkiaSharp and DirectML, and has since grown its own features: multi-document tabs, broad image-format support, " +
             "GPU background removal, Photoshop-style shortcuts and more."));
         body.Children.Add(Paragraph(
-            "Found a problem or have an idea? Help › Report a Bug and Help › Request a Feature open a pre-filled GitHub issue. " +
-            "If Layer Form saves you time, a donation helps keep it maintained."));
+            "Found a problem or have an idea? Help › Report a Bug and Help › Request a Feature open a pre-filled GitHub issue."));
 
         var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(-12, 0, 0, 0) };
         foreach (var (text, url) in new[] { ("GitHub", ProjectLinks.Repository), ("What’s new", ProjectLinks.Changelog), ("License", ProjectLinks.License), ("Original Compositor", ProjectLinks.Upstream) })
@@ -44,9 +43,9 @@ public static class AboutDialog
         var dialog = new ContentDialog
         {
             XamlRoot = root, Content = body,
-            PrimaryButtonText = "Donate", CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close,
+            CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close,
         };
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary) ProjectLinks.Open(ProjectLinks.Donate);
+        await dialog.ShowAsync();
         return true;
     }
 

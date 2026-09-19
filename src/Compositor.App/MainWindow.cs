@@ -821,8 +821,6 @@ public sealed class MainWindow : Window
             Add("Report a Bug…", () => ProjectLinks.Open(ProjectLinks.BugReport)),
             Add("Request a Feature…", () => ProjectLinks.Open(ProjectLinks.FeatureRequest)),
             null,
-            Add("Donate…", () => ProjectLinks.Open(ProjectLinks.Donate)),
-            null,
             Add("About Layer Form", () => _ = WithDialog(AboutDialog.Show), () => !showingDialog));
 
         // Aliases Windows users expect, not shown in the menus.

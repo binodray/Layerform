@@ -23,7 +23,7 @@ public static class NavigationTools
         NavigationTool.CloneStamp => "Clone Stamp (S) · Alt-click sets the source",
         NavigationTool.Blur => "Smear (R)",
         NavigationTool.Gradient => "Gradient (G)",
-        NavigationTool.Shape => "Shape (U) · Shift+U switches Rectangle/Ellipse",
+        NavigationTool.Shape => "Shape (U) · Shift+U cycles the shapes",
         NavigationTool.Crop => "Crop (C)",
         NavigationTool.Move => "Move / Transform (V)",
         NavigationTool.Hand => "Hand (H)",

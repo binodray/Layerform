@@ -12,9 +12,8 @@ Layer Form started as a Windows port of [Compositor](https://github.com/robbieti
 
 - **Help › Report a Bug…** opens a GitHub bug-report form with the Layer Form version and Windows build already filled in.
 - **Help › Request a Feature…** opens the GitHub feature-request form, so ideas land in the issue tracker with consistent labels.
-- **Help › Donate…** and a Donate button in the About dialog.
 - A proper **About Layer Form** dialog with the app icon, version, Windows build, a short introduction, project lineage and links to the repository, changelog, license and the original Compositor project. It replaces the plain message box used previously.
-- GitHub issue forms, pull-request template, funding links, security policy and a Windows CI workflow.
+- GitHub issue forms, pull-request template, security policy and a Windows CI workflow.
 
 ## [1.0.0] — Windows edition, compared with Compositor for macOS
 
@@ -34,6 +33,9 @@ This is the baseline of Layer Form: everything the Windows edition does differen
 
 - **Align and Distribute** for layers (left, horizontal center, right, top, vertical center, bottom; distribute horizontal/vertical centers), from the Layer menu and a dockable Align panel.
 - **Layer effects**: *Change Color* (recolor a layer and keep its transparency), *Gradient Overlay* and *Add Shadow*.
+- **More shapes**: Line, Triangle, Polygon and Star join Rectangle and Ellipse; `Shift+U` cycles through all six.
+- **Swatches panel** with a preset palette of grays, hues and skin tones, plus custom swatches saved from the foreground color and kept between sessions.
+- **Color panel** with RGB sliders and a hex field for the foreground and background colors.
 - **Dockable panels** in a new *Window* menu: Color, Swatches, Align, History and Actions, plus Layers and *Reset Panels*. Visibility is saved between sessions.
 - **Actions panel** that records a sequence of menu commands, saves it by name and replays it on the active document with one click.
 - **History panel** listing the document's undo steps.

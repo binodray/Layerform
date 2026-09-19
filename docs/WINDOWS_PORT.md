@@ -44,10 +44,12 @@ The solution is intentionally split into `Compositor.Core` and `Compositor.App`.
 
 - Align and Distribute for one or more layers, from the Layer menu or a dockable Align panel
 - Change Color, Gradient Overlay and Add Shadow layer effects
+- Line, Triangle, Polygon and Star shapes alongside Rectangle and Ellipse
+- A Swatches panel with a preset palette and saved custom swatches
 - A Window menu of dockable panels — Color, Swatches, Align, History and Actions — whose visibility is remembered
 - Actions: record menu commands, save them by name and replay them on the active document
 - A right-click canvas menu with selection or layer commands depending on context
-- Help menu links to pre-filled GitHub bug and feature forms, a donation link and an About dialog
+- Help menu links to pre-filled GitHub bug and feature forms, and an About dialog
 
 ### Canvas and input
 

@@ -3,13 +3,12 @@ using System.Runtime.InteropServices;
 
 namespace Compositor.App.Platform;
 
-/// <summary>Where Help › Report a Bug, Request a Feature and Donate send people.
+/// <summary>Where Help › Report a Bug and Request a Feature send people.
 /// Bug reports and feature requests open the repository's GitHub issue forms with
 /// the version and Windows fields already filled in, so reports arrive triaged.</summary>
 public static class ProjectLinks
 {
     public const string Repository = "https://github.com/binodray/Layerform";
-    public const string Donate = "https://github.com/sponsors/binodray";
     public const string Changelog = Repository + "/blob/main/CHANGELOG.md";
     public const string License = Repository + "/blob/main/LICENSE";
     public const string Upstream = "https://github.com/robbietilton/Compositor";

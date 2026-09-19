@@ -27,9 +27,18 @@ This is not a wrapped Mac application. The Windows port rebuilds the application
 - Layer, folder and clipping masks
 - Adjustment layers for Hue/Saturation, Levels, Curves, Exposure, Gradient Map and Grain
 - Reorder, duplicate, rename and group layers
-- Align and distribute layers from the Layer menu or the Align panel
 - Change Color, Gradient Overlay and Shadow layer effects
 - Non-destructive move, resize, rotate, flip and free-distort transforms
+
+### Alignment, color and swatches
+
+- **Align** left, right, top, bottom or center edges of one or more layers, and **distribute** them evenly — from the Layer menu or the dockable Align panel
+- **Swatches** panel with a ready-made palette (grays, hues and skin tones) plus your own saved swatches, kept between sessions
+- **Color** panel with RGB sliders and a hex field for the foreground and background colors
+
+### Shapes
+
+- Rectangle, Ellipse, Line, Triangle, Polygon and Star tools, cycled with `U` / `Shift+U`
 
 ### Selection, painting and retouching
 
@@ -50,6 +59,7 @@ This is not a wrapped Mac application. The Windows port rebuilds the application
 
 - Native WinUI 3 window, menus, controls and Windows file pickers
 - Dockable Color, Swatches, Align, History and Actions panels (Window menu)
+- **Report a Bug** and **Request a Feature** in the Help menu open a pre-filled GitHub issue, so feedback reaches the project in one click
 - Record a sequence of menu commands as an Action and replay it with one click
 - Right-click canvas menu for selection and layer commands
 - Multiple documents in tabs with overflow navigation
@@ -68,7 +78,6 @@ Everything is handled through GitHub, and the app links straight to it:
 
 - **Help › Report a Bug…** opens a [bug report](https://github.com/binodray/Layerform/issues/new?template=bug_report.yml) with your Layer Form version and Windows build already filled in.
 - **Help › Request a Feature…** opens a [feature request](https://github.com/binodray/Layerform/issues/new?template=feature_request.yml).
-- **Help › Donate…** — if Layer Form is useful to you, [sponsoring the project](https://github.com/sponsors/binodray) helps keep it maintained.
 
 Security issues should be reported privately; see [SECURITY.md](SECURITY.md).
 
