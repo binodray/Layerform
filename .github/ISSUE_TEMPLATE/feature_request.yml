@@ -1,0 +1,47 @@
+name: Feature request
+description: Propose an improvement to the Windows editing workflow.
+title: "[Feature]: "
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: Describe the editing task and why the current workflow is difficult.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Explain how the feature should work from a user's perspective.
+    validations:
+      required: true
+  - type: textarea
+    id: references
+    attributes:
+      label: References or examples
+      description: Screenshots and links are useful; explain what should be learned from them rather than asking for an exact clone.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Small interaction or polish
+        - Existing tool improvement
+        - New tool or filter
+        - File-format or compatibility work
+        - Performance or accessibility
+        - Unsure
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and the changelog first.
+          required: true
+        - label: This request describes the problem, not only a preferred implementation.
+          required: true
+

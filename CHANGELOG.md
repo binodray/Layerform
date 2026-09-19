@@ -1,0 +1,77 @@
+# Changelog
+
+All notable changes to Layer Form are documented in this file.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Layer Form uses [Semantic Versioning](https://semver.org/) for public Windows releases.
+
+Layer Form started as a Windows port of [Compositor](https://github.com/robbietilton/Compositor) for macOS. The first section below tracks ongoing work; the section after it records what the Windows edition changes and adds compared with the macOS app it is based on.
+
+## [Unreleased]
+
+### Added
+
+- **Help › Report a Bug…** opens a GitHub bug-report form with the Layer Form version and Windows build already filled in.
+- **Help › Request a Feature…** opens the GitHub feature-request form, so ideas land in the issue tracker with consistent labels.
+- **Help › Donate…** and a Donate button in the About dialog.
+- A proper **About Layer Form** dialog with the app icon, version, Windows build, a short introduction, project lineage and links to the repository, changelog, license and the original Compositor project. It replaces the plain message box used previously.
+- GitHub issue forms, pull-request template, funding links, security policy and a Windows CI workflow.
+
+## [1.0.0] — Windows edition, compared with Compositor for macOS
+
+This is the baseline of Layer Form: everything the Windows edition does differently from, or in addition to, Compositor. No packaged installer has been published yet; builds are made from source.
+
+### Platform and architecture
+
+- Rewrote the application in **C# 12 on .NET 8** — the macOS app is Swift with C pixel kernels.
+- Replaced the SwiftUI/AppKit interface with a **WinUI 3 / Windows App SDK** interface.
+- Split the code into `Compositor.Core`, a platform-neutral library for documents, history, editing, masks, filters, rendering and the `.comp` format, and `Compositor.App`, the Windows UI. Core logic can be tested without opening a window.
+- Replaced Core Graphics and Metal rendering with a **SkiaSharp** raster core and a **Win2D** canvas.
+- Moved Remove Background from Apple's frameworks to **ONNX Runtime with DirectML**.
+- Ships as an unpackaged, self-contained x64/ARM64 executable. The macOS project instead produces a signed and notarized DMG.
+- Minimum OS is Windows 10 1809 (macOS 26 for the original).
+
+### Added — features not in Compositor
+
+- **Align and Distribute** for layers (left, horizontal center, right, top, vertical center, bottom; distribute horizontal/vertical centers), from the Layer menu and a dockable Align panel.
+- **Layer effects**: *Change Color* (recolor a layer and keep its transparency), *Gradient Overlay* and *Add Shadow*.
+- **Dockable panels** in a new *Window* menu: Color, Swatches, Align, History and Actions, plus Layers and *Reset Panels*. Visibility is saved between sessions.
+- **Actions panel** that records a sequence of menu commands, saves it by name and replays it on the active document with one click.
+- **History panel** listing the document's undo steps.
+- **Canvas context menu**: right-click with a selection for cut/copy/fill/delete/hue-saturation, or without one for layer commands.
+- **Broader file support** via Windows Imaging Component: WebP, AVIF, GIF, BMP, ICO and JPEG XR, alongside JPEG, PNG, TIFF and HEIC/HEIF (where the Windows codec is installed).
+- **SVG import**, rasterized at its declared size or `viewBox` with transparency preserved.
+- **Open Image** opens each selected file in its own tab. *Import Images* still places files as layers in the current project.
+- **Background-removal model manager**: download, update, select and remove BiRefNet Lite (~115 MB) or full BiRefNet (~490 MB) inside the app.
+- **GPU selection for Remove Background**: DirectML runs on the adapter with the most dedicated memory, tries the other adapters, then falls back to the CPU. Models load on first use and unload when idle to free memory.
+- **Zoom controls in the options bar** (Fit, 100%, Zoom In, Zoom Out) and a zoom cursor that shows whether a click zooms in or out.
+- **Rotate from a corner handle** during Transform, kept in sync with the numeric Rotate field.
+- New Windows app icon set and a matching title-bar icon.
+- Command-line tool (`tools/Compositor.Cli`) to inspect `.comp` projects, export them to PNG/JPEG and verify a save round trip.
+- xUnit test suite for project compatibility, rendering and editor-session behavior.
+
+### Changed — adapted for Windows
+
+- Keyboard shortcuts use Windows conventions: `Ctrl` instead of `⌘`, `Alt` instead of `⌥` (for example, Alt-click sets the Clone Stamp source), `Ctrl+Y` as an alias for Redo, and numpad aliases for zoom.
+- Menus follow Windows order (File, Edit, Select, Image, Filter, Layer, View, Window, Help), with Exit (`Alt+F4`) on the File menu.
+- Custom title bar with native caption buttons, the menu bar and document tabs sharing one row.
+- Tab close buttons moved to the right side of each tab. When tabs no longer fit, an overflow menu lists the hidden ones.
+- Untitled documents are numbered per session and no longer inherit counters from earlier sessions.
+- Windows file pickers, drag-and-drop, clipboard formats, per-monitor DPI awareness and long-path support replace their macOS counterparts.
+- Tool options live in a contextual options bar. Long transform controls scroll horizontally so the zoom controls stay visible.
+- Magic Wand selections have smoother edges after mask post-processing.
+- The Change Color dialog was redesigned so its preview and mode controls don't clip at common window sizes.
+- A dark visual system built from WinUI theme resources and Lucide/Fluent icons.
+
+### Fixed during the port
+
+- The Zoom tool can be selected reliably with `Z`.
+- Transform rotation gives the same result whether it's typed in or dragged.
+- Tab controls stay usable when the title bar runs out of horizontal space.
+- Transparent pixels are preserved when recoloring layers and importing SVGs.
+
+### Kept from Compositor
+
+The editing model and file format are unchanged, so projects open in both apps: layers and folders, blend modes, layer/folder/clipping masks, adjustment layers, non-destructive transforms and free distort, marquee/lasso/Magic Wand selections, Brush/Eraser, Spot Healing, Clone Stamp, Smear, Gradient and Shape tools, Levels, Curves, Hue/Saturation, Exposure, Gradient Map, Grain, Gaussian and Motion Blur, Add Noise, Lens Correction, Content-Aware Fill, Crop, Canvas Size, Image Size, JPEG export with preview, and `.comp` projects.
+
+[Unreleased]: https://github.com/binodray/Layerform/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/binodray/Layerform/releases/tag/v1.0.0

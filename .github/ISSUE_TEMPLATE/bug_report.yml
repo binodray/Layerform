@@ -1,0 +1,76 @@
+name: Bug report
+description: Report reproducible behavior that is incorrect or unexpected.
+title: "[Bug]: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve Layer Form. Please remove sensitive content from screenshots and sample projects.
+  - type: input
+    id: version
+    attributes:
+      label: Layer Form version or commit
+      placeholder: "Example: main at abc1234"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Example: Windows 11 24H2, x64"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Canvas or transform
+        - Layers or masks
+        - Selection tools
+        - Painting or retouching
+        - Adjustments or filters
+        - Open, save, import or export
+        - Background removal
+        - Window, tabs or panels
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest reliable sequence and a safe sample file when possible.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add screenshots, logs, GPU details or codec information if relevant.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I removed private or copyrighted material that I cannot share.
+          required: true
+
