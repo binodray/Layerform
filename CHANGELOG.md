@@ -4,20 +4,31 @@ All notable changes to Layer Form are documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Layer Form uses [Semantic Versioning](https://semver.org/) for public Windows releases.
 
-Layer Form started as a Windows port of [Compositor](https://github.com/robbietilton/Compositor) for macOS. The first section below tracks ongoing work; the section after it records what the Windows edition changes and adds compared with the macOS app it is based on.
+Layer Form started as a Windows port of [Compositor](https://github.com/robbietilton/Compositor) for macOS. The 1.0.0 section records what the Windows edition changes and adds compared with the macOS app it is based on; later sections track releases since then.
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-20
+
+The first public release, with a Windows installer and automatic updates.
+
 ### Added
 
+- **Windows installer** (`LayerForm-Setup-1.1.0.exe`). Installs for the current user without administrator rights, adds a Start menu shortcut and an optional desktop shortcut, and registers a standard uninstaller in Settings › Apps.
+- **Automatic updates.** Shortly after launch, Layer Form checks [layerform.hastamev.com](https://layerform.hastamev.com) and GitHub Releases for a newer version. When one is available it shows what's new and offers **Download and Install**, **Skip This Version** or **Later**. The download is verified against its SHA-256 checksum, Layer Form asks to save open projects, installs the update and reopens by itself.
+- **Help › Check for Updates…** to check on demand.
 - **Help › Report a Bug…** opens a GitHub bug-report form with the Layer Form version and Windows build already filled in.
 - **Help › Request a Feature…** opens the GitHub feature-request form, so ideas land in the issue tracker with consistent labels.
-- A proper **About Layer Form** dialog with the app icon, version, Windows build, a short introduction, project lineage and links to the repository, changelog, license and the original Compositor project. It replaces the plain message box used previously.
+- A proper **About Layer Form** dialog with the app icon, version, Windows build, a short introduction, project lineage and links to the website, repository, changelog, license and the original Compositor project. It replaces the plain message box used previously.
 - GitHub issue forms, pull-request template, security policy and a Windows CI workflow.
+
+### Changed
+
+- The Shape tool's hint now says `Shift+U` cycles through all six shapes.
 
 ## [1.0.0] — Windows edition, compared with Compositor for macOS
 
-This is the baseline of Layer Form: everything the Windows edition does differently from, or in addition to, Compositor. No packaged installer has been published yet; builds are made from source.
+This is the baseline of Layer Form: everything the Windows edition does differently from, or in addition to, Compositor. It was built from source only and not published as a download.
 
 ### Platform and architecture
 
@@ -75,5 +86,5 @@ This is the baseline of Layer Form: everything the Windows edition does differen
 
 The editing model and file format are unchanged, so projects open in both apps: layers and folders, blend modes, layer/folder/clipping masks, adjustment layers, non-destructive transforms and free distort, marquee/lasso/Magic Wand selections, Brush/Eraser, Spot Healing, Clone Stamp, Smear, Gradient and Shape tools, Levels, Curves, Hue/Saturation, Exposure, Gradient Map, Grain, Gaussian and Motion Blur, Add Noise, Lens Correction, Content-Aware Fill, Crop, Canvas Size, Image Size, JPEG export with preview, and `.comp` projects.
 
-[Unreleased]: https://github.com/binodray/Layerform/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/binodray/Layerform/releases/tag/v1.0.0
+[Unreleased]: https://github.com/binodray/Layerform/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/binodray/Layerform/releases/tag/v1.1.0

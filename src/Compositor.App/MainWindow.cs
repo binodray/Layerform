@@ -159,7 +159,47 @@ public sealed class MainWindow : Window
             QueueRefresh();
             await SuggestClipboardSize();
             if (files.Length > 0) await ReceivePaths(files, null, null);
+            if (Updater.IsInstalled)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(4));
+                await CheckForUpdates(manual: false);
+            }
         };
+    }
+
+    // MARK: Updates
+
+    /// <summary>Set once an update has downloaded; the installer runs as the window closes.</summary>
+    private string? pendingInstaller;
+
+    /// <summary>At launch this stays quiet unless there's a version the user hasn't skipped;
+    /// from Help › Check for Updates it always reports the outcome.</summary>
+    private async Task CheckForUpdates(bool manual)
+    {
+        if (pendingInstaller != null) return;
+        UpdateInfo? update;
+        try { update = await Updater.FindNewerAsync(); }
+        catch (Exception e)
+        {
+            Diagnostics.Log("Update check: " + e.Message);
+            if (manual) ShowError("Couldn’t check for updates", "Layer Form couldn’t reach the update server. Check your internet connection and try again.");
+            return;
+        }
+        if (update == null)
+        {
+            if (manual) ShowError("Layer Form is up to date", $"You have the latest version, {Updater.CurrentText}.");
+            return;
+        }
+        if (!manual && Updater.IsSkipped(update.Version)) return;
+        var choice = await WithDialog<UpdateChoice>(root => UpdateDialog.Ask(root, update));
+        if (choice == UpdateChoice.Skip) Updater.Skip(update.Version);
+        if (choice != UpdateChoice.Install) return;
+        var installer = await WithDialog(root => UpdateDialog.Download(root, update));
+        if (installer == null) return;
+        pendingInstaller = installer;
+        // Closing asks to save each modified project; if the user cancels, the update installs
+        // whenever Layer Form is next closed.
+        Close();
     }
 
     // MARK: Layout (ContentView.swift)
@@ -821,6 +861,7 @@ public sealed class MainWindow : Window
             Add("Report a Bug…", () => ProjectLinks.Open(ProjectLinks.BugReport)),
             Add("Request a Feature…", () => ProjectLinks.Open(ProjectLinks.FeatureRequest)),
             null,
+            Add("Check for Updates…", () => _ = CheckForUpdates(manual: true), () => !showingDialog && pendingInstaller == null),
             Add("About Layer Form", () => _ = WithDialog(AboutDialog.Show), () => !showingDialog));
 
         // Aliases Windows users expect, not shown in the menus.
@@ -1306,6 +1347,7 @@ public sealed class MainWindow : Window
         }
         finally { workspace.IsManaging = false; QueueRefresh(); }
         closingConfirmed = true;
+        if (pendingInstaller != null) Updater.LaunchInstaller(pendingInstaller);
         Close();
     }
 

@@ -10,8 +10,14 @@
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 </div>
 
+## Download
+
+**[Download Layer Form for Windows](https://layerform.hastamev.com)** — or grab `LayerForm-Setup-<version>.exe` from [GitHub Releases](https://github.com/binodray/Layerform/releases/latest).
+
+The installer sets Layer Form up for your user account, with no administrator prompt. Layer Form then keeps itself current: when a new version is released it shows what's new and offers to download and install it, skip that version, or remind you later.
+
 > [!NOTE]
-> Layer Form is under active development. The editor is usable from source, but a signed installer and stable release channel are not available yet.
+> The installer isn't code-signed yet, so Windows SmartScreen may show "Windows protected your PC" the first time. Choose **More info › Run anyway**.
 
 ## Why Layer Form?
 
@@ -111,7 +117,7 @@ dotnet build src/Compositor.App/Compositor.App.csproj -c Debug -p:Platform=x64
 & ".\src\Compositor.App\bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\LayerForm.exe"
 ```
 
-You do not need to build an installer to test the application.
+You do not need to build an installer to test the application. To build one, see [Releasing](docs/RELEASING.md).
 
 ## Tests
 

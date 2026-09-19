@@ -14,7 +14,7 @@ The macOS project remains the foundation for the document model, editing vocabul
 | Canvas presentation | Apple graphics stack | Win2D canvas with high-DPI input mapping |
 | ML background removal | macOS model path | ONNX Runtime with DirectML adapters and CPU fallback |
 | Files and clipboard | macOS pickers/pasteboard | Windows dialogs, WIC codecs, drag-and-drop and clipboard APIs |
-| Distribution | macOS app bundle | Unpackaged self-contained Windows executable; installer planned |
+| Distribution | Signed, notarized DMG | Self-contained app in a per-user Inno Setup installer, with in-app updates |
 
 The solution is intentionally split into `Compositor.Core` and `Compositor.App`. Core owns documents, history, project serialization, editing operations, masks, filters and rendering. The app project owns WinUI controls and Windows-only services. This keeps core behavior testable without constructing a desktop window.
 
@@ -89,7 +89,7 @@ The solution is intentionally split into `Compositor.Core` and `Compositor.App`.
 - Layer Form follows Windows keyboard, dialog and window-management conventions where they differ from macOS.
 - Codec availability can vary with installed Windows extensions.
 - Remove Background is optional because its models are large and downloaded on demand.
-- A signed installer, automatic update channel and stable release artifacts are still planned.
+- The installer is not code-signed yet, so SmartScreen may warn on first run.
 - The Windows UI will continue to diverge where a native Windows interaction is clearer, while preserving project compatibility and the recognizable Compositor workflow.
 
 ## Attribution

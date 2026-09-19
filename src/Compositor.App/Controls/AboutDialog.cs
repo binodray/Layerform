@@ -33,9 +33,9 @@ public static class AboutDialog
         body.Children.Add(Paragraph(
             "Found a problem or have an idea? Help › Report a Bug and Help › Request a Feature open a pre-filled GitHub issue."));
 
-        var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(-12, 0, 0, 0) };
-        foreach (var (text, url) in new[] { ("GitHub", ProjectLinks.Repository), ("What’s new", ProjectLinks.Changelog), ("License", ProjectLinks.License), ("Original Compositor", ProjectLinks.Upstream) })
-            links.Children.Add(new HyperlinkButton { Content = text, NavigateUri = new Uri(url) });
+        var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, Margin = new Thickness(-6, 0, 0, 0) };
+        foreach (var (text, url) in new[] { ("Website", ProjectLinks.Website), ("GitHub", ProjectLinks.Repository), ("What’s new", ProjectLinks.Changelog), ("License", ProjectLinks.License), ("Original Compositor", ProjectLinks.Upstream) })
+            links.Children.Add(new HyperlinkButton { Content = text, NavigateUri = new Uri(url), Padding = new Thickness(6, 4, 6, 4) });
         body.Children.Add(links);
 
         body.Children.Add(Ui.Label("© 2026 Binod Ray and contributors. Portions © Wonder Assembly LLC. Released under the MIT License.", 11, brush: Ui.Secondary));

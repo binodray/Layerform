@@ -18,6 +18,8 @@
     <SelfContained>true</SelfContained>
     <EnableMsixTooling>false</EnableMsixTooling>
     <DefaultLanguage>en-US</DefaultLanguage>
+    <!-- ONNX Runtime and the Windows App SDK both ship DirectML.dll 1.15.4; either copy is fine. -->
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260804001" />
@@ -32,4 +34,12 @@
     <Content Include="..\..\LICENSE" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <!-- Without MSIX tooling, publish leaves out the app's compiled XAML (App.xbf) and resource index
+       (LayerForm.pri); without them the installed app can't find its theme resources and exits at launch. -->
+  <Target Name="PublishXamlResources" AfterTargets="Publish">
+    <ItemGroup>
+      <XamlPublishResource Include="$(OutDir)$(AssemblyName).pri;$(OutDir)**\*.xbf" />
+    </ItemGroup>
+    <Copy SourceFiles="@(XamlPublishResource)" DestinationFiles="@(XamlPublishResource->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
 </Project>
