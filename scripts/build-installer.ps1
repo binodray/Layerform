@@ -73,11 +73,21 @@ $feed = [ordered]@{
 $feedPath = Join-Path $root 'site\update.json'
 [IO.File]::WriteAllText($feedPath, ($feed | ConvertTo-Json) + "`n", [Text.UTF8Encoding]::new($false))
 
+# The website as one zip for the hosting file manager. tar writes forward-slash paths,
+# which Linux hosts need; PowerShell 5's Compress-Archive writes backslashes.
+$siteZip = Join-Path $root 'artifacts\layerform-site.zip'
+if (Test-Path $siteZip) { Remove-Item $siteZip -Force }
+Push-Location (Join-Path $root 'site')
+try { tar.exe -a -c -f $siteZip .htaccess index.html update.json favicon.png assets }
+finally { Pop-Location }
+if ($LASTEXITCODE -ne 0) { throw 'Could not create the website zip.' }
+
 Write-Host ''
 Write-Host "Installer : $setup ($([math]::Round($size / 1MB, 1)) MB)" -ForegroundColor Green
 Write-Host "SHA-256   : $sha256"
 Write-Host "Feed      : $feedPath"
+Write-Host "Website   : $siteZip"
 Write-Host ''
 Write-Host 'To publish:'
 Write-Host "  1. Create GitHub release v$version and attach $setupName."
-Write-Host '  2. Commit and push site\update.json; the Pages workflow publishes it to layerform.hastamev.com.'
+Write-Host '  2. Upload update.json (or the whole website zip) to layerform.hastamev.com.'

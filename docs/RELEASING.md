@@ -7,7 +7,7 @@ A release is an installer on GitHub Releases plus an updated `site/update.json`.
 ```text
 Layer Form (installed)
    │  on launch, and from Help › Check for Updates…
-   ├─► https://layerform.hastamev.com/update.json      ← site/update.json, published by GitHub Pages
+   ├─► https://layerform.hastamev.com/update.json      ← site/update.json, uploaded to cPanel
    └─► api.github.com/repos/binodray/Layerform/releases/latest
           │
           ▼  newest version wins; ignored if the user skipped it
@@ -41,17 +41,21 @@ The installer is per-user (`%LOCALAPPDATA%\Programs\Layer Form`), so updates nev
    ```
 
 6. **Publish the GitHub release** for tag `vx.y.z`, paste the changelog section as the description, and attach `LayerForm-Setup-x.y.z.exe`. The file name must contain `Setup` and end in `.exe`.
+7. **Update the website.** In cPanel › File Manager, open the `layerform.hastamev.com` folder and upload the new `site/update.json`, replacing the old one. (If the page itself changed, upload `artifacts/layerform-site.zip` and extract it instead.)
 
-The Pages workflow publishes `site/` on every push to `main` that touches it. Because `update.json` points at the release asset, **publish the GitHub release (step 6) straight after pushing**, so the feed never points at a file that isn't there yet.
+Do step 7 **after** step 6: `update.json` points at the release asset, so it must never go live before the installer exists.
 
 ## Website
 
-`site/` is the download page for [layerform.hastamev.com](https://layerform.hastamev.com). Its download button and "What's new" section read `update.json`, so they update with each release automatically.
+`site/` is the download page for [layerform.hastamev.com](https://layerform.hastamev.com), hosted on the hastamev.com GoDaddy cPanel account. Its download button and "What's new" section read `update.json`, so they update with each release automatically. `site/.htaccess` forces HTTPS and stops `update.json` from being cached.
 
-One-time setup:
+One-time setup in cPanel:
 
-- **DNS:** a `CNAME` record for `layerform` pointing to `binodray.github.io`, at the DNS provider for hastamev.com.
-- **GitHub:** repository Settings › Pages › Source: **GitHub Actions**. After the first deploy, confirm the custom domain `layerform.hastamev.com` and turn on **Enforce HTTPS**.
+1. **Domains › Create a New Domain** (older cPanel: **Subdomains**): enter `layerform.hastamev.com`, keep the suggested document root (for example `public_html/layerform.hastamev.com`) and uncheck "Share document root".
+2. **File Manager:** open that document root, **Upload** `artifacts/layerform-site.zip`, then right-click it › **Extract**, and delete the zip. Turn on *Settings › Show Hidden Files* to confirm `.htaccess` is there.
+3. **SSL/TLS Status:** run **AutoSSL** so `https://layerform.hastamev.com` gets a certificate (can take a few minutes).
+
+When hastamev.com's DNS is managed by GoDaddy on the same account, the subdomain's DNS record is created automatically. If `layerform.hastamev.com` doesn't resolve after an hour, add an `A` record named `layerform` pointing to the hosting IP shown in cPanel (currently the same address as `hastamev.com`).
 
 ## Code signing
 
