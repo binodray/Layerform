@@ -6,7 +6,7 @@
 ; /SILENT /UPDATE=1; in that mode Layer Form is reopened once the update is in place.
 
 #ifndef AppVersion
-  #define AppVersion "1.1.0"
+  #define AppVersion "1.2.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\artifacts\publish\win-x64"

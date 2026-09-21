@@ -12,6 +12,9 @@ public static class FileDialogs
     public static string? PickProjectFolder(IntPtr owner) =>
         Show(owner, open: true, "Open Project", Array.Empty<(string, string)>(), null, null, FOS.PICKFOLDERS | FOS.FORCEFILESYSTEM | FOS.PATHMUSTEXIST).FirstOrDefault();
 
+    public static string? PickFolder(IntPtr owner, string title) =>
+        Show(owner, open: true, title, Array.Empty<(string, string)>(), null, null, FOS.PICKFOLDERS | FOS.FORCEFILESYSTEM | FOS.PATHMUSTEXIST).FirstOrDefault();
+
     public static string[] PickImages(IntPtr owner, string title = "Import Images") =>
         Show(owner, open: true, title,
             new[] { ("Images", "*.jpg;*.jpeg;*.png;*.svg;*.heic;*.heif;*.tif;*.tiff;*.bmp;*.gif;*.ico;*.webp;*.avif;*.jxr;*.wdp;*.hdp"), ("All files", "*.*") }, null, null,

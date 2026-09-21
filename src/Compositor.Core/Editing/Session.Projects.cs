@@ -35,6 +35,8 @@ public sealed partial class EditorSession
         CollapsedGroupIds = new HashSet<Guid>();
         isMaskSelected = false;
         CropRect = null;
+        Slices.Clear();
+        SliceDraft = null;
         TransformEditState = null;
         var m = snapshot.Manifest;
         Document = new CanvasDocument
@@ -42,10 +44,11 @@ public sealed partial class EditorSession
             Id = m.DocumentId, Width = m.Width, Height = m.Height, Resolution = m.Resolution ?? 72,
             Layers = m.Layers.Select(r => new ImageLayer
             {
-                Id = r.Id, Asset = snapshot.Images.GetValueOrDefault(r.Id), Name = r.Name, IsVisible = r.IsVisible, Transform = r.Transform,
+                Id = r.Id, Asset = snapshot.Images.GetValueOrDefault(r.Id), Name = r.Name, IsVisible = r.IsVisible, IsLocked = r.IsLocked == true, Transform = r.Transform,
                 ParentId = r.ParentId, IsGroup = r.IsGroup == true, Opacity = r.Opacity ?? 1, BlendMode = r.BlendMode ?? LayerBlendMode.Normal,
                 Mask = snapshot.Mask(r), MaskSourceId = r.MaskSourceId, Adjustment = r.Adjustment,
                 Shape = LayerShape.Loaded(r.Shape, snapshot.Images.GetValueOrDefault(r.Id)?.Image),
+                Text = r.Text is { } text && snapshot.Images.GetValueOrDefault(r.Id)?.Image is { } textImage ? new LayerText(text, textImage) : null,
             }).ToImmutableList(),
         };
         ActiveLayerId = m.ActiveLayerId;
@@ -61,6 +64,8 @@ public sealed partial class EditorSession
         CollapsedGroupIds = new HashSet<Guid>();
         isMaskSelected = false;
         CropRect = null;
+        Slices.Clear();
+        SliceDraft = null;
         TransformEditState = null;
         Document = null;
         ActiveLayerId = null;
@@ -90,10 +95,10 @@ public sealed partial class EditorSession
     }
 
     /// <summary>Renders the visible part of the document for the canvas, including edits in progress.</summary>
-    public void RenderCanvas(RenderSurface surface)
+    public void RenderCanvas(RenderSurface surface, Guid? hiddenLayerId = null)
     {
         if (document == null) return;
-        CompositeRenderer.Render(new LiveCompositeSource(this, document, includePreviews: true), surface);
+        CompositeRenderer.Render(new LiveCompositeSource(this, document, includePreviews: true, hiddenLayerId), surface);
     }
 
     internal RasterEdit? LiveMaskEdit(Guid id) =>
@@ -177,13 +182,15 @@ public sealed class LiveCompositeSource : ICompositeSource
     private readonly CanvasDocument document;
     private readonly Dictionary<Guid, ImageLayer> byId;
     private readonly bool previews;
+    private readonly Guid? hiddenLayerId;
     public IReadOnlyList<Guid> RenderOrder { get; }
 
-    public LiveCompositeSource(EditorSession session, CanvasDocument document, bool includePreviews = false)
+    public LiveCompositeSource(EditorSession session, CanvasDocument document, bool includePreviews = false, Guid? hiddenLayerId = null)
     {
         this.session = session;
         this.document = document;
         previews = includePreviews;
+        this.hiddenLayerId = hiddenLayerId;
         byId = document.Layers.ToDictionary(l => l.Id);
         RenderOrder = document.RenderLayers().Select(l => l.Id).ToList();
     }
@@ -191,7 +198,17 @@ public sealed class LiveCompositeSource : ICompositeSource
     public Guid? Parent(Guid id) => byId.GetValueOrDefault(id)?.ParentId;
     public Guid? MaskSource(Guid id) => byId.GetValueOrDefault(id)?.MaskSourceId;
     public LayerAdjustment? Adjustment(Guid id) => byId.GetValueOrDefault(id)?.Adjustment;
-    public double Opacity(Guid id) => byId.GetValueOrDefault(id)?.Opacity ?? 1;
+    public double Opacity(Guid id)
+    {
+        double opacity = byId.GetValueOrDefault(id)?.Opacity ?? 1;
+        var parent = Parent(id);
+        for (int depth = 0; parent is { } p && depth < 64; depth++)
+        {
+            opacity *= byId.GetValueOrDefault(p)?.Opacity ?? 1;
+            parent = Parent(p);
+        }
+        return Math.Clamp(opacity, 0, 1);
+    }
     public LayerBlendMode Blend(Guid id) => byId.TryGetValue(id, out var l) ? session.DisplayedBlendMode(l) : LayerBlendMode.Normal;
 
     public ClipMask? FolderClip(Guid folderId)
@@ -210,6 +227,7 @@ public sealed class LiveCompositeSource : ICompositeSource
 
     public void DrawOwn(Guid id, RenderSurface surface, IReadOnlyList<ClipMask> clips)
     {
+        if (id == hiddenLayerId) return;
         if (!byId.TryGetValue(id, out var layer)) return;
         var blend = session.DisplayedBlendMode(layer);
         if (!previews)
@@ -217,7 +235,7 @@ public sealed class LiveCompositeSource : ICompositeSource
             if (layer.Asset?.Image is not { } plain) return;
             var t = session.DisplayedTransform(layer);
             var m = layer.Mask is { } owned ? MaskPlacement.ClipImage(owned, session.DisplayedMaskPlacement(layer), t, plain.Width, plain.Height) : null;
-            LayerRenderer.Draw(surface, plain, t, layer.Opacity, blend, m, clips);
+            LayerRenderer.Draw(surface, plain, t, Opacity(id), blend, m, clips);
             return;
         }
         var stroke = session.BrushStroke?.Layer.Id == id ? session.BrushStroke
@@ -230,12 +248,12 @@ public sealed class LiveCompositeSource : ICompositeSource
             var canvasTransform = LayerTransform.Canvas(document.Width, document.Height);
             var warpMask = layer.Mask is { } owned ? MaskPlacement.ClipImage(owned, layer.MaskTransform, canvasTransform, warp.Width, warp.Height, 2048) : null;
             var warpImage = RasterImage.FromPixels(warp.Width, warp.Height, warp.Image.PeekPixels().GetPixelSpan());
-            LayerRenderer.Draw(surface, warpImage, canvasTransform, layer.Opacity, blend, warpMask, clips);
+            LayerRenderer.Draw(surface, warpImage, canvasTransform, Opacity(id), blend, warpMask, clips);
             return;
         }
         if (stroke == null && session.DistortPreviewFor(layer) is { } distorted)
         {
-            LayerRenderer.Draw(surface, distorted.Image, distorted.Transform, layer.Opacity, blend, distorted.Mask, clips);
+            LayerRenderer.Draw(surface, distorted.Image, distorted.Transform, Opacity(id), blend, distorted.Mask, clips);
             return;
         }
         var transform = (stroke is { IsMask: false } ? stroke.PaintTransform : (LayerTransform?)null) ?? session.DisplayedTransform(layer);
@@ -257,7 +275,7 @@ public sealed class LiveCompositeSource : ICompositeSource
         }
         if (stroke == null && session.ShapeTransformPreview(layer, transform) is { } shaped)
         {
-            LayerRenderer.Draw(surface, shaped, transform, layer.Opacity, blend, mask, clips);
+            LayerRenderer.Draw(surface, shaped, transform, Opacity(id), blend, mask, clips);
             return;
         }
         if (stroke is { IsMask: false })
@@ -266,7 +284,7 @@ public sealed class LiveCompositeSource : ICompositeSource
             var allClips = new List<ClipMask>();
             if (mask != null) allClips.Add(new RevealOutsideMaskClip(mask, stroke.Layer.Transform));
             allClips.AddRange(clips);
-            DrawEditPreview(surface, stroke, transform, layer.Opacity, blend, allClips);
+            DrawEditPreview(surface, stroke, transform, Opacity(id), blend, allClips);
             return;
         }
         if (stroke is { IsMask: true })
@@ -275,11 +293,11 @@ public sealed class LiveCompositeSource : ICompositeSource
             if (layer.Asset?.Image is not { } image) return;
             var allClips = new List<ClipMask> { new RasterEditMaskClip(stroke) };
             allClips.AddRange(clips);
-            LayerRenderer.Draw(surface, image, transform, layer.Opacity, blend, null, allClips);
+            LayerRenderer.Draw(surface, image, transform, Opacity(id), blend, null, allClips);
             return;
         }
         var source = session.FilterEdit?.PreviewImage(id) ?? session.Levels?.PreviewImage(id) ?? session.HueSaturation?.PreviewImage(id) ?? layer.Asset?.Image;
-        if (source != null) LayerRenderer.Draw(surface, source, transform, layer.Opacity, blend, mask, clips);
+        if (source != null) LayerRenderer.Draw(surface, source, transform, Opacity(id), blend, mask, clips);
     }
 
     /// <summary>The layer's original pixels with a raster edit's tiles over them, blended and clipped as one layer.</summary>

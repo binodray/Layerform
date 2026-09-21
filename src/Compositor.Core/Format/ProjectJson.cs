@@ -64,6 +64,7 @@ public static class ProjectJson
             Id = Uuid(o, "id"),
             Name = Str(o, "name"),
             IsVisible = Bool(o, "isVisible"),
+            IsLocked = OptBool(o, "isLocked"),
             Transform = ReadTransform(Obj(o["transform"])),
             ImageFile = OptStr(o, "imageFile"),
             ParentId = OptUuid(o, "parentID"),
@@ -77,7 +78,31 @@ public static class ProjectJson
             MaskPlacement = IsPresent(o, "maskPlacement") ? ReadTransform(Obj(o["maskPlacement"])) : null,
             MaskLinked = OptBool(o, "maskLinked"),
             Shape = IsPresent(o, "shape") ? ReadShape(Obj(o["shape"])) : IsPresent(o, LayerFormShapeKey) ? ReadLayerFormShape(Obj(o[LayerFormShapeKey])) : null,
+            Text = IsPresent(o, "text") ? ReadText(Obj(o["text"])) : null,
         };
+    }
+
+    private static LayerTextStyle ReadText(JsonObject o)
+    {
+        var alignment = OptStr(o, "alignment") switch
+        {
+            "Center" => LayerTextAlignment.Center,
+            "Right" => LayerTextAlignment.Right,
+            _ => LayerTextAlignment.Left,
+        };
+        SizeD? box = null;
+        if (IsPresent(o, "boxSize"))
+        {
+            var pair = Pair(o, "boxSize");
+            box = new SizeD(pair.A, pair.B);
+        }
+        var style = new LayerTextStyle
+        {
+            Content = Str(o, "content"), FontName = Str(o, "fontName"), FontSize = Dbl(o, "fontSize"),
+            Red = Dbl(o, "red"), Green = Dbl(o, "green"), Blue = Dbl(o, "blue"), Alignment = alignment,
+            Tracking = OptDouble(o, "tracking") ?? 0, Leading = OptDouble(o, "leading") ?? 0, BoxSize = box,
+        };
+        return style.IsValid ? style : throw ProjectException.Invalid();
     }
 
     public static LayerTransform ReadTransform(JsonObject o)
@@ -315,6 +340,7 @@ public static class ProjectJson
         w.WriteString("id", FormatGuid(l.Id));
         if (l.ImageFile is { } image) w.WriteString("imageFile", image);
         if (l.IsGroup is { } group) w.WriteBoolean("isGroup", group);
+        if (l.IsLocked == true) w.WriteBoolean("isLocked", true);
         w.WriteBoolean("isVisible", l.IsVisible);
         if (l.Shape is { } extra && !extra.IsMacStyle)
         {
@@ -354,6 +380,26 @@ public static class ProjectJson
             WriteDouble(w, "green", shape.Green);
             w.WriteString("kind", shape.Kind == ShapeKind.Rectangle ? "Rectangle" : "Ellipse");
             WriteDouble(w, "red", shape.Red);
+            w.WriteEndObject();
+        }
+        if (l.Text is { } text)
+        {
+            w.WritePropertyName("text");
+            w.WriteStartObject();
+            w.WriteString("alignment", text.Alignment switch { LayerTextAlignment.Center => "Center", LayerTextAlignment.Right => "Right", _ => "Left" });
+            if (text.BoxSize is { } box)
+            {
+                w.WritePropertyName("boxSize");
+                w.WriteStartArray(); WriteDoubleValue(w, box.Width); WriteDoubleValue(w, box.Height); w.WriteEndArray();
+            }
+            WriteDouble(w, "blue", text.Blue);
+            w.WriteString("content", text.Content);
+            w.WriteString("fontName", text.FontName);
+            WriteDouble(w, "fontSize", text.FontSize);
+            WriteDouble(w, "green", text.Green);
+            WriteDouble(w, "leading", text.Leading);
+            WriteDouble(w, "red", text.Red);
+            WriteDouble(w, "tracking", text.Tracking);
             w.WriteEndObject();
         }
         w.WritePropertyName("transform");

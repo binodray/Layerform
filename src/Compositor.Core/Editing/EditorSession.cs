@@ -5,7 +5,7 @@ using Compositor.Model;
 
 namespace Compositor.Editing;
 
-public enum NavigationTool { Move, Marquee, Lasso, Wand, Crop, Brush, SpotHealing, CloneStamp, Blur, Gradient, Shape, Eyedropper, Hand, Zoom, Idle }
+public enum NavigationTool { Move, Marquee, Lasso, Wand, Crop, Slice, Brush, SpotHealing, CloneStamp, Blur, Gradient, Type, Shape, Eyedropper, Hand, Zoom, Idle }
 
 public static class NavigationTools
 {
@@ -23,8 +23,10 @@ public static class NavigationTools
         NavigationTool.CloneStamp => "Clone Stamp (S) · Alt-click sets the source",
         NavigationTool.Blur => "Smear (R)",
         NavigationTool.Gradient => "Gradient (G)",
+        NavigationTool.Type => "Type (T)",
         NavigationTool.Shape => "Shape (U) · Shift+U cycles the shapes",
         NavigationTool.Crop => "Crop (C)",
+        NavigationTool.Slice => "Slice (K)",
         NavigationTool.Move => "Move / Transform (V)",
         NavigationTool.Hand => "Hand (H)",
         NavigationTool.Zoom => "Zoom (Z)",
@@ -132,6 +134,14 @@ public sealed partial class EditorSession
     public Guid? RenamingLayerId { get; set; }
     public bool ShowsSampleRing { get; set; } = true;
     public bool ShowsPixelGrid { get; set; } = true;
+    public bool ShowsLayoutGrid { get; set; }
+    public bool SnapsToLayoutGrid { get; set; } = true;
+    public bool ShowsRulers { get; set; }
+    public int GridSpacing { get; set; } = 8;
+    public List<RectD> Slices { get; } = new();
+    public RectD? SliceDraft { get; set; }
+    public int SliceRows { get; set; } = 1;
+    public int SliceColumns { get; set; } = 1;
     public CanvasViewport Viewport;
 
     private NavigationTool tool = NavigationTool.Move;
@@ -205,14 +215,15 @@ public sealed partial class EditorSession
         && HueSaturation == null && Levels == null && FilterEdit == null && AdjustmentEditingId == null;
 
     public bool TransformsAsGroup => SelectedLayerIds.Count > 1 || (SelectedLayerIds.Count == 1 && ActiveLayer?.IsGroup == true);
+    public bool SelectedLayersLocked => document != null && SelectedLayerIds.Any(id => document.Layer(id)?.IsLocked == true);
 
     public bool CanTransform
     {
         get
         {
-            if (!CanEditLayers) return false;
-            if (TransformsAsGroup) return GroupTransformMembers.Count > 0;
-            return ActiveLayer is { } layer && layer.Asset != null && !layer.IsGroup && EffectiveVisibleIds.Contains(layer.Id);
+            if (!CanEditLayers || SelectedLayersLocked) return false;
+            if (TransformsAsGroup) return GroupTransformMembers.Count > 0 && GroupTransformMembers.All(l => !l.IsLocked);
+            return ActiveLayer is { IsLocked: false } layer && layer.Asset != null && !layer.IsGroup && EffectiveVisibleIds.Contains(layer.Id);
         }
     }
 
@@ -532,7 +543,7 @@ public sealed partial class EditorSession
 
     public async Task DeleteLayer(Guid id)
     {
-        if (!CanEditLayers || document?.IndexOf(id) < 0) return;
+        if (!CanEditLayers || document?.Layer(id)?.IsLocked != false) return;
         if (await DeleteWithLiveMaskChoice(new[] { id })) return;
         FinishDeletingLayer(id, new());
     }
@@ -543,6 +554,7 @@ public sealed partial class EditorSession
     {
         if (!CanEditLayers || document == null) return;
         var ids = document.Layers.Select(l => l.Id).Where(SelectedLayerIds.Contains).ToList();
+        if (ids.Any(id => document.Layer(id)?.IsLocked == true)) return;
         if (ids.Count <= 1) { await DeleteActiveLayer(); return; }
         if (await DeleteWithLiveMaskChoice(ids)) return;
         FinishDeletingLayers(ids, new());
@@ -551,7 +563,7 @@ public sealed partial class EditorSession
     public void RenameLayer(Guid id, string name)
     {
         name = name.Trim();
-        if (IsProjectBusy || IsImporting || name.Length == 0 || document?.IndexOf(id) is not (>= 0 and var index)) return;
+        if (IsProjectBusy || IsImporting || name.Length == 0 || document?.IndexOf(id) is not (>= 0 and var index) || document.Layers[index].IsLocked) return;
         BeginEdit("Rename Layer");
         ReplaceLayer(index, document.Layers[index] with { Name = name });
         EndEdit();
@@ -563,6 +575,15 @@ public sealed partial class EditorSession
         var layer = document.Layers[index];
         BeginEdit(layer.IsVisible ? "Hide Layer" : "Show Layer");
         ReplaceLayer(index, layer with { IsVisible = !layer.IsVisible });
+        EndEdit();
+    }
+
+    public void ToggleLayerLock(Guid id)
+    {
+        if (!CanEditLayers || document?.IndexOf(id) is not (>= 0 and var index)) return;
+        var layer = document.Layers[index];
+        BeginEdit(layer.IsLocked ? "Unlock Layer" : "Lock Layer");
+        ReplaceLayer(index, layer with { IsLocked = !layer.IsLocked });
         EndEdit();
     }
 
@@ -685,11 +706,12 @@ public static class DocumentExtensions
 {
     public static Format.ProjectLayerRecord HierarchyRecord(this ImageLayer layer) => new()
     {
-        Id = layer.Id, Name = layer.Name, IsVisible = layer.IsVisible, Transform = layer.Transform,
+        Id = layer.Id, Name = layer.Name, IsVisible = layer.IsVisible, IsLocked = layer.IsLocked, Transform = layer.Transform,
         ImageFile = layer.Asset == null ? null : Format.ProjectLayerRecord.ImageFileName(layer.Id),
         ParentId = layer.ParentId, IsGroup = layer.IsGroup, Opacity = layer.Opacity, BlendMode = layer.BlendMode,
         MaskFile = layer.Mask == null ? null : Format.ProjectLayerRecord.MaskFileName(layer.Id), MaskEnabled = layer.Mask?.IsEnabled,
         MaskSourceId = layer.MaskSourceId, Adjustment = layer.Adjustment, MaskPlacement = layer.Mask?.Placement, MaskLinked = layer.Mask?.IsLinked,
+        Text = layer.LiveText?.Style,
     };
 
     public static List<Format.LayerHierarchy.Entry> HierarchyEntries(this CanvasDocument document) =>

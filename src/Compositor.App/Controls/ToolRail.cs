@@ -46,6 +46,20 @@ public sealed class ToolRail : UserControl
             Content = tools, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             Padding = new Thickness(0, 16, 0, 12),
         };
+        RefreshToolVisibility();
+    }
+
+    public bool IsToolVisible(NavigationTool tool) => Settings.Get("toolbar." + tool, 1) > 0;
+
+    public void SetToolVisible(NavigationTool tool, bool visible)
+    {
+        Settings.Set("toolbar." + tool, visible ? 1 : 0);
+        RefreshToolVisibility();
+    }
+
+    public void RefreshToolVisibility()
+    {
+        foreach (var (tool, button) in buttons) button.Visibility = IsToolVisible(tool) ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Photoshop's tool groups: right-click (or press and hold) a tool to pick one of its variants.</summary>
@@ -135,9 +149,13 @@ public sealed class ToolRail : UserControl
         backgroundButton.Margin = new Thickness(12, 12, 0, 0);
         var foregroundButton = PlainButton(foreground, () => Pick(false), "Foreground color");
         var swap = Ui.IconButton(Icons.Lucide(LucideIcons.ArrowLeftRight, 10), () => session()?.SwapPaletteColors(), "Swap foreground and background (X)", 12, 12);
-        swap.Margin = new Thickness(27, -3, 0, 0);
+        swap.HorizontalAlignment = HorizontalAlignment.Left;
+        swap.VerticalAlignment = VerticalAlignment.Top;
+        swap.Margin = new Thickness(24, 0, 0, 0);
         var reset = Ui.IconButton(Icons.Lucide(LucideIcons.RotateCcw, 9), () => session()?.ResetPaletteColors(), "Default colors (D)", 12, 12);
-        reset.Margin = new Thickness(-1, 27, 0, 0);
+        reset.HorizontalAlignment = HorizontalAlignment.Left;
+        reset.VerticalAlignment = VerticalAlignment.Top;
+        reset.Margin = new Thickness(0, 24, 0, 0);
         foreach (var e in new FrameworkElement[] { backgroundButton, foregroundButton, swap, reset })
         {
             e.HorizontalAlignment = HorizontalAlignment.Left;

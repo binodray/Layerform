@@ -18,6 +18,7 @@ using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 using Windows.Storage;
 using Windows.System;
+using SkiaSharp;
 
 using SelectionMode = Compositor.Editing.SelectionMode;
 
@@ -30,6 +31,9 @@ internal sealed class MenuCommand
     public VirtualKey? Key;
     public VirtualKeyModifiers Modifiers;
     public string? KeyText;
+    public VirtualKey? DefaultKey;
+    public VirtualKeyModifiers DefaultModifiers;
+    public string? DefaultKeyText;
     public Func<bool> Enabled = () => true;
     public Func<bool>? Checked;
     public Action Run = () => { };
@@ -76,6 +80,7 @@ public sealed class MainWindow : Window
     private IntPtr Hwnd => WinRT.Interop.WindowNative.GetWindowHandle(this);
     private readonly List<DockPanel> docks = new();
     private readonly ActionsDock actionsDock;
+    private readonly TextDock textDock;
 
     public MainWindow(string[] files)
     {
@@ -110,7 +115,8 @@ public sealed class MainWindow : Window
         BackgroundModels.CleanPartialDownloads();
         BackgroundModels.Restore();
         actionsDock = new ActionsDock(() => attached, RunCommand);
-        docks.AddRange(new DockPanel[] { new ColorDock(() => attached), new SwatchesDock(() => attached), new AlignDock(() => attached), new HistoryDock(() => attached), actionsDock });
+        textDock = new TextDock(() => attached);
+        docks.AddRange(new DockPanel[] { textDock, new ColorDock(() => attached), new SwatchesDock(() => attached), new CustomLayersDock(() => attached), new AlignDock(() => attached), new HistoryDock(() => attached), actionsDock });
         foreach (var dock in docks)
         {
             var d = dock;
@@ -153,6 +159,7 @@ public sealed class MainWindow : Window
         canvasView.DropReceived += (data, point) => _ = ReceiveDrop(data, point);
         canvasView.BeforePaste = () => host.RefreshClipboardAsync();
         canvasView.ContextMenuRequested += ShowCanvasMenu;
+        canvasView.TextRequested += EditTextAt;
         Attach();
         root.Loaded += async (_, _) =>
         {
@@ -165,6 +172,12 @@ public sealed class MainWindow : Window
                 await CheckForUpdates(manual: false);
             }
         };
+    }
+
+    public void ActivateExistingInstance()
+    {
+        AppWindow.Show();
+        Activate();
     }
 
     // MARK: Updates
@@ -491,6 +504,7 @@ public sealed class MainWindow : Window
             : $"Drag to draw a {s.ShapeKind.Name().ToLowerInvariant()} on a new layer · Shift keeps proportions · Alt from center · Shift-U next shape · Right-click the tool for all shapes · Escape cancel",
         NavigationTool.Gradient => "Drag to draw · Drag ends to adjust · Shift 45° · 1–0 opacity · Enter apply · Escape cancel",
         NavigationTool.Crop => "Drag to crop · Enter apply · Escape cancel · Space to pan",
+        NavigationTool.Slice => "Drag to create a slice · Set rows and columns to divide the canvas into a grid · K selects the tool",
         NavigationTool.Move => "Drag to move · Handles to resize · Circle to rotate · 1–0 layer opacity · Space to pan",
         NavigationTool.Hand => "Drag to pan · Ctrl+wheel to zoom",
         NavigationTool.Idle => "No tool selected · Press a tool's key to pick one · Space to pan",
@@ -580,7 +594,7 @@ public sealed class MainWindow : Window
             showingDialog = true;
             try { await Dialogs.Error(Content.XamlRoot, title, message); }
             catch (Exception e) { Diagnostics.Log("Error dialog: " + e.Message); }
-            finally { showingDialog = false; }
+            finally { showingDialog = false; QueueRefresh(); }
         }
     }
 
@@ -589,7 +603,7 @@ public sealed class MainWindow : Window
         if (showingDialog || Content?.XamlRoot is not { } xamlRoot) return default;
         showingDialog = true;
         try { return await show(xamlRoot); }
-        finally { showingDialog = false; _ = DrainErrors(); }
+        finally { showingDialog = false; QueueRefresh(); _ = DrainErrors(); }
     }
 
     // MARK: Tabs (ProjectTabStrip.swift)
@@ -698,6 +712,125 @@ public sealed class MainWindow : Window
 
     // MARK: Commands and menus
 
+    private static string EncodeShortcut(VirtualKey key, VirtualKeyModifiers modifiers) => $"{(int)key}:{(int)modifiers}";
+
+    private static bool TryDecodeShortcut(string text, out VirtualKey key, out VirtualKeyModifiers modifiers)
+    {
+        key = default;
+        modifiers = default;
+        var parts = text.Split(':');
+        if (parts.Length != 2 || !int.TryParse(parts[0], out var k) || !int.TryParse(parts[1], out var m)) return false;
+        key = (VirtualKey)k;
+        modifiers = (VirtualKeyModifiers)m;
+        return key != VirtualKey.None;
+    }
+
+    private static void ApplySavedShortcut(MenuCommand command)
+    {
+        if (command.Id.Length == 0 || !UserLibrary.Shared.Shortcuts.TryGetValue(command.Id, out var saved)) return;
+        if (saved.Length == 0) { command.Key = null; command.KeyText = null; return; }
+        if (!TryDecodeShortcut(saved, out var key, out var modifiers)) return;
+        command.Key = key;
+        command.Modifiers = modifiers;
+        command.KeyText = null;
+    }
+
+    private async Task<bool?> ShowKeyboardShortcuts(XamlRoot xamlRoot)
+    {
+        var unique = commands.Where(c => c.Id.Length > 0).GroupBy(c => c.Id).Select(g => g.First()).OrderBy(c => c.Id).ToList();
+        var pending = unique.ToDictionary(c => c.Id, c => (c.Key, c.Modifiers));
+        var fields = new Dictionary<string, TextBox>();
+        var list = new StackPanel { Spacing = 4 };
+        var error = Ui.Label("", 11);
+        error.Foreground = new SolidColorBrush(Colors.OrangeRed);
+        foreach (var command in unique)
+        {
+            var label = Ui.Label(command.Id, 12);
+            label.VerticalAlignment = VerticalAlignment.Center;
+            var field = new TextBox { Width = 150, FontSize = 12, IsReadOnly = true, Text = ShortcutText(command), PlaceholderText = "Not assigned" };
+            fields[command.Id] = field;
+            field.KeyDown += (_, e) =>
+            {
+                var modifiers = VirtualKeyModifiers.None;
+                if (Down(VirtualKey.Control)) modifiers |= VirtualKeyModifiers.Control;
+                if (Down(VirtualKey.Shift)) modifiers |= VirtualKeyModifiers.Shift;
+                if (Down(VirtualKey.Menu)) modifiers |= VirtualKeyModifiers.Menu;
+                if (e.Key is VirtualKey.Control or VirtualKey.Shift or VirtualKey.Menu) { e.Handled = true; return; }
+                if (modifiers == VirtualKeyModifiers.None && e.Key is VirtualKey.Back or VirtualKey.Delete)
+                {
+                    pending[command.Id] = (null, VirtualKeyModifiers.None);
+                    field.Text = "";
+                    e.Handled = true;
+                    return;
+                }
+                if (!modifiers.HasFlag(VirtualKeyModifiers.Control) && !modifiers.HasFlag(VirtualKeyModifiers.Menu))
+                {
+                    error.Text = "Custom shortcuts must include Ctrl or Alt.";
+                    e.Handled = true;
+                    return;
+                }
+                pending[command.Id] = (e.Key, modifiers);
+                var preview = new MenuCommand { Key = e.Key, Modifiers = modifiers };
+                field.Text = ShortcutText(preview);
+                error.Text = "";
+                e.Handled = true;
+            };
+            var row = new Grid { ColumnSpacing = 12 };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(label);
+            Grid.SetColumn(field, 1);
+            row.Children.Add(field);
+            list.Children.Add(row);
+        }
+        var body = new StackPanel { Spacing = 8, Children = { Ui.Label("Select a shortcut box, then press the new key combination. Backspace clears it.", 11, brush: Ui.Secondary), error, new ScrollViewer { Content = list, Height = 430, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } } };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = xamlRoot, Title = "Keyboard Shortcuts", Content = body,
+            PrimaryButtonText = "Save", SecondaryButtonText = "Reset all", CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        dialog.PrimaryButtonClick += (_, e) =>
+        {
+            var duplicate = pending.Where(x => x.Value.Key != null)
+                .GroupBy(x => (x.Value.Key, x.Value.Modifiers)).FirstOrDefault(g => g.Count() > 1);
+            if (duplicate != null)
+            {
+                e.Cancel = true;
+                error.Text = $"That shortcut is assigned to: {string.Join(", ", duplicate.Select(x => x.Key))}.";
+            }
+        };
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.None) return null;
+        if (result == ContentDialogResult.Secondary)
+        {
+            UserLibrary.Shared.Shortcuts.Clear();
+            foreach (var command in commands)
+            {
+                command.Key = command.DefaultKey; command.Modifiers = command.DefaultModifiers; command.KeyText = command.DefaultKeyText;
+                if (command.Item != null) command.Item.KeyboardAcceleratorTextOverride = command.KeyText ?? ShortcutText(command);
+            }
+        }
+        else
+        {
+            UserLibrary.Shared.Shortcuts.Clear();
+            foreach (var entry in pending)
+            {
+                var defaults = commands.First(c => c.Id == entry.Key);
+                if (entry.Value.Key == defaults.DefaultKey && entry.Value.Modifiers == defaults.DefaultModifiers) continue;
+                UserLibrary.Shared.Shortcuts[entry.Key] = entry.Value.Key is { } key ? EncodeShortcut(key, entry.Value.Modifiers) : "";
+            }
+            foreach (var command in commands)
+            {
+                command.Key = command.DefaultKey; command.Modifiers = command.DefaultModifiers; command.KeyText = command.DefaultKeyText;
+                ApplySavedShortcut(command);
+                if (command.Item != null) command.Item.KeyboardAcceleratorTextOverride = command.KeyText ?? ShortcutText(command);
+            }
+        }
+        UserLibrary.Shared.Save();
+        return true;
+    }
+
     private MenuCommand Add(string title, Action run, Func<bool>? enabled = null, VirtualKey? key = null, VirtualKeyModifiers modifiers = VirtualKeyModifiers.Control,
         string? keyText = null, bool textKey = false) =>
         Add(() => title, run, enabled, key, modifiers, keyText, textKey);
@@ -707,6 +840,10 @@ public sealed class MainWindow : Window
     {
         var command = new MenuCommand { Title = title, Run = run, Enabled = enabled ?? (() => true), Key = key, Modifiers = modifiers, KeyText = keyText, TextKey = textKey };
         try { command.Id = title(); } catch { command.Id = ""; }
+        command.DefaultKey = key;
+        command.DefaultModifiers = modifiers;
+        command.DefaultKeyText = keyText;
+        ApplySavedShortcut(command);
         commands.Add(command);
         return command;
     }
@@ -733,6 +870,9 @@ public sealed class MainWindow : Window
             null,
             Add("Export PNG…", () => _ = ExportPng(), () => HasDocument && CanStart, VirtualKey.E, Ctrl | Shift),
             Add("Export JPEG…", () => _ = ExportJpeg(), () => HasDocument && CanStart, VirtualKey.S, Ctrl | Shift | Alt),
+            Add("Export Slices...", () => _ = ExportSlices(), () => HasDocument && CanStart && attached?.Slices.Count > 0),
+            null,
+            Add("Toolbar Settings...", () => _ = ToolbarSettings()),
             null,
             Add("Close Project", () => _ = CloseTab(workspace.SelectedId), () => workspace.CanSwitch, VirtualKey.W),
             null,
@@ -750,7 +890,9 @@ public sealed class MainWindow : Window
             Add("Fill with Foreground Color", () => _ = s().FillSelection(false), () => attached?.CanEditPixels == true, backspace, Alt, "Alt+Backspace", textKey: true),
             Add("Fill with Background Color", () => _ = s().FillSelection(true), () => attached?.CanEditPixels == true, backspace, Ctrl, "Ctrl+Backspace", textKey: true),
             Add("Clear Selection Pixels", () => _ = s().ClearSelectedPixels(), () => attached is { } x && x.Selection != null && x.CanEditPixels, keyText: "Delete"),
-            Add("Content-Aware Fill…", () => _ = s().BeginFilter(FilterKind.ContentAwareFill), () => attached?.CanContentAwareFill == true, backspace, Shift, "Shift+Backspace", textKey: true));
+            Add("Content-Aware Fill…", () => _ = s().BeginFilter(FilterKind.ContentAwareFill), () => attached?.CanContentAwareFill == true, backspace, Shift, "Shift+Backspace", textKey: true),
+            null,
+            Add("Keyboard Shortcuts…", () => _ = WithDialog(ShowKeyboardShortcuts), () => !showingDialog));
 
         var select = Menu("Select",
             Add("All", () => s().SelectAll(), () => HasDocument, VirtualKey.A, textKey: true),
@@ -760,7 +902,8 @@ public sealed class MainWindow : Window
             Add("Mask's Black Areas", () => { if (s().ActiveLayerId is { } id) s().LoadMaskSelection(id); }, () => attached is { } x && x.ActiveLayer?.Mask != null && x.CanEditSelection),
             null,
             Add(() => $"Expand by {attached?.SelectionExpandAmount ?? 1} px", () => s().ExpandSelection(s().SelectionExpandAmount), () => attached?.CanModifySelection == true),
-            Add(() => $"Contract by {attached?.SelectionContractAmount ?? 1} px", () => s().ContractSelection(s().SelectionContractAmount), () => attached?.CanModifySelection == true));
+            Add(() => $"Contract by {attached?.SelectionContractAmount ?? 1} px", () => s().ContractSelection(s().SelectionContractAmount), () => attached?.CanModifySelection == true),
+            Add(() => $"Feather by {attached?.SelectionFeatherAmount ?? 2} px", () => s().FeatherSelection(s().SelectionFeatherAmount), () => attached?.CanModifySelection == true));
 
         bool Colors() => attached is { } x && x.CanAdjustColors && x.HueSaturation == null;
         var image = Menu("Image",
@@ -800,7 +943,7 @@ public sealed class MainWindow : Window
             Add(() => attached?.CanTransformSelection == true ? "Transform Selection" : "Transform Layer", () => _ = s().TransformCommand(),
                 () => attached is { } x && (x.CanTransform || x.CanTransformSelection), VirtualKey.T),
             Add(() => attached?.Selection == null ? "Duplicate Layer" : "Layer via Copy", () => s().LayerViaCopy(),
-                () => attached is { } x && (x.CanCopyPixels || (x.Selection == null && x.CanEditLayers && x.ActiveLayer is { IsGroup: false })), VirtualKey.J),
+                () => attached is { } x && (x.CanCopyPixels || (x.Selection == null && x.CanEditLayers && x.ActiveLayer is { IsLocked: false })), VirtualKey.J),
             null,
             Add(() => attached?.ActiveLayer?.MaskSourceId == null ? "Create Clipping Mask" : "Release Clipping Mask",
                 () => { if (s().ActiveLayerId is { } id) s().ToggleClippingMask(id); }, () => attached?.ActiveLayerId is { } id && attached.CanToggleClippingMask(id), VirtualKey.G, Ctrl | Alt),
@@ -808,8 +951,12 @@ public sealed class MainWindow : Window
             Add("Group Selected Layers", () => s().GroupSelectedLayers(), () => attached?.CanEditLayers == true, VirtualKey.G),
             Add("Move Out of Folder", () => s().MoveActiveLayerOutOfGroup(), () => attached is { } x && x.CanEditLayers && x.ActiveLayer?.ParentId != null),
             Add("New Blank Layer", () => s().AddBlankLayer(), () => attached?.CanEditLayers == true, VirtualKey.N, Ctrl | Shift),
-            Add("Rename Layer…", () => { s().RenamingLayerId = s().ActiveLayerId; s().Notify(); }, () => attached is { } x && x.CanEditLayers && x.ActiveLayer != null),
+            Add("Save as Custom Layer", () => { if (s().ActiveLayer is { } active) UserLibrary.Shared.SaveLayer(active); },
+                () => attached?.ActiveLayer is { Asset: not null, IsGroup: false }),
+            Add("Rename Layer…", () => { s().RenamingLayerId = s().ActiveLayerId; s().Notify(); }, () => attached is { } x && x.CanEditLayers && x.ActiveLayer is { IsLocked: false }),
             Add(() => attached?.ActiveLayer?.IsVisible == false ? "Show Layer" : "Hide Layer", () => { if (s().ActiveLayerId is { } id) s().ToggleLayerVisibility(id); },
+                () => attached is { } x && x.CanEditLayers && x.ActiveLayer != null),
+            Add(() => attached?.ActiveLayer?.IsLocked == true ? "Unlock Layer" : "Lock Layer", () => { if (s().ActiveLayerId is { } id) s().ToggleLayerLock(id); },
                 () => attached is { } x && x.CanEditLayers && x.ActiveLayer != null),
             null,
             Add("Move Layer Up", () => s().MoveActiveLayer(1), () => attached?.CanMoveActiveLayer(1) == true, bracketRight, Ctrl, "Ctrl+]"),
@@ -847,6 +994,14 @@ public sealed class MainWindow : Window
 
         var pixelGrid = Add("Pixel Grid (800% and above)", () => { s().ShowsPixelGrid = !s().ShowsPixelGrid; s().InvalidateCanvas(); }, () => attached != null);
         pixelGrid.Checked = () => attached?.ShowsPixelGrid == true;
+        var layoutGrid = Add("Layout Grid", () => { s().ShowsLayoutGrid = !s().ShowsLayoutGrid; s().InvalidateCanvas(); }, () => attached != null);
+        layoutGrid.Checked = () => attached?.ShowsLayoutGrid == true;
+        var snapGrid = Add("Snap to Layout Grid", () => s().SnapsToLayoutGrid = !s().SnapsToLayoutGrid, () => attached != null);
+        snapGrid.Checked = () => attached?.SnapsToLayoutGrid == true;
+        var rulers = Add("Rulers", () => { s().ShowsRulers = !s().ShowsRulers; s().InvalidateCanvas(); }, () => attached != null, VirtualKey.R, Ctrl);
+        rulers.Checked = () => attached?.ShowsRulers == true;
+        var gridSpacing = Add("Grid Spacing", () => { var current = s().GridSpacing; s().GridSpacing = current >= 64 ? 8 : current * 2; s().InvalidateCanvas(); }, () => attached != null);
+        gridSpacing.Title = () => $"Grid Spacing: {attached?.GridSpacing ?? 8} px";
         var transformControls = Add("Show Transform Controls", () => { s().ShowsTransformControls = !s().ShowsTransformControls; s().InvalidateCanvas(); },
             () => attached is { Tool: NavigationTool.Move, Document: not null }, VirtualKey.H);
         transformControls.Checked = () => attached?.ShowsTransformControls == true;
@@ -855,7 +1010,7 @@ public sealed class MainWindow : Window
             Add("Actual Pixels", () => s().Zoom(1), () => HasDocument, VirtualKey.Number1),
             Add("Zoom In", () => ZoomBy(1.25), () => HasDocument, plus, Ctrl, "Ctrl++"),
             Add("Zoom Out", () => ZoomBy(1 / 1.25), () => HasDocument, minus, Ctrl, "Ctrl+−"),
-            null, pixelGrid, transformControls);
+            null, rulers, pixelGrid, layoutGrid, snapGrid, gridSpacing, transformControls);
 
         var help = Menu("Help",
             Add("Report a Bug…", () => ProjectLinks.Open(ProjectLinks.BugReport)),
@@ -1125,7 +1280,138 @@ public sealed class MainWindow : Window
         Execute(command);
     }
 
+    private async Task ToolbarSettings()
+    {
+        if (showingDialog || Content?.XamlRoot == null) return;
+        var choices = NavigationTools.Rail.Where(t => t != NavigationTool.Lasso)
+            .Select(t => (Tool: t, Check: new CheckBox { Content = t.Label(), IsChecked = rail.IsToolVisible(t) }))
+            .ToList();
+        var grid = new Grid { ColumnSpacing = 18, RowSpacing = 4 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        for (int i = 0; i < choices.Count; i++)
+        {
+            int row = i / 2, column = i % 2;
+            while (grid.RowDefinitions.Count <= row) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetRow(choices[i].Check, row); Grid.SetColumn(choices[i].Check, column); grid.Children.Add(choices[i].Check);
+        }
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot, Title = "Customize Toolbar", Content = new StackPanel
+            {
+                Spacing = 12,
+                Children = { Ui.Label("Choose the tools shown in the left toolbar. Hidden tools remain available through their keyboard shortcuts.", 11, brush: Ui.Secondary), grid },
+            },
+            PrimaryButtonText = "Save", SecondaryButtonText = "Show All", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary,
+        };
+        showingDialog = true;
+        try
+        {
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+                foreach (var choice in choices) rail.SetToolVisible(choice.Tool, choice.Check.IsChecked == true);
+            else if (result == ContentDialogResult.Secondary)
+                foreach (var choice in choices) rail.SetToolVisible(choice.Tool, true);
+        }
+        finally { showingDialog = false; }
+        rail.RefreshToolVisibility();
+    }
+
     // MARK: Projects (ProjectController.swift / ProjectWorkspace.swift)
+
+    private bool EditTextAt(PointD point)
+    {
+        if (attached is not { Document: { } document } s || !s.CanEditText) return false;
+        var target = document.RenderLayers().AsEnumerable().Reverse().FirstOrDefault(layer => layer.LiveText != null && layer.Transform.Contains(point));
+        if (target != null) s.SelectLayer(target.Id);
+        else
+        {
+            var color = s.ForegroundColor;
+            var style = s.TextDefaults with { Content = "Text", Red = color.Red, Green = color.Green, Blue = color.Blue };
+            if (!s.AddTextLayer(style, point)) return false;
+        }
+        SetDockVisible(textDock, true);
+        textDock.Refresh();
+        QueueRefresh();
+        return target == null;
+    }
+
+    private async Task EditTextDialogAt(PointD point)
+    {
+        if (attached is not { Document: { } document } s || !s.CanEditText) return;
+        var target = document.RenderLayers().AsEnumerable().Reverse().FirstOrDefault(layer => layer.LiveText != null && layer.Transform.Contains(point));
+        if (target != null) s.SelectLayer(target.Id);
+        var original = target?.LiveText?.Style ?? s.TextDefaults with
+        {
+            Content = "", Red = s.ForegroundColor.Red, Green = s.ForegroundColor.Green, Blue = s.ForegroundColor.Blue,
+        };
+        var content = new TextBox
+        {
+            Text = original.Content, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 110,
+            PlaceholderText = "Type your text…",
+        };
+        var fonts = new ComboBox { Width = 230, IsEditable = true, PlaceholderText = "Font" };
+        foreach (var family in SkiaSharp.SKFontManager.Default.FontFamilies.OrderBy(x => x)) fonts.Items.Add(family);
+        fonts.Text = original.FontName;
+        var size = new NumberBox { Width = 90, Minimum = 1, Maximum = 2000, Value = original.FontSize, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
+        var tracking = new NumberBox { Width = 90, Minimum = -100, Maximum = 1000, Value = original.Tracking, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
+        var leading = new NumberBox { Width = 90, Minimum = 0, Maximum = 5000, Value = original.Leading, PlaceholderText = "Auto", SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
+        var color = new TextBox { Width = 92, Text = new PaletteColor(original.Red, original.Green, original.Blue).Hex, PlaceholderText = "RRGGBB" };
+        var alignment = new ComboBox { Width = 110 };
+        foreach (var value in Enum.GetValues<LayerTextAlignment>()) alignment.Items.Add(value);
+        alignment.SelectedItem = original.Alignment;
+        var fixedBox = new CheckBox { Content = "Fixed paragraph box", IsChecked = original.BoxSize != null };
+        var boxWidth = new NumberBox { Width = 90, Minimum = 16, Maximum = 30000, Value = original.BoxSize?.Width ?? 600, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
+        var boxHeight = new NumberBox { Width = 90, Minimum = 16, Maximum = 30000, Value = original.BoxSize?.Height ?? 300, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
+        var boxRow = Ui.Row(8, Ui.Label("W", 11, brush: Ui.Secondary), boxWidth, Ui.Label("H", 11, brush: Ui.Secondary), boxHeight);
+        void SyncBox() { boxWidth.IsEnabled = boxHeight.IsEnabled = fixedBox.IsChecked == true; boxRow.Opacity = boxWidth.IsEnabled ? 1 : 0.45; }
+        fixedBox.Checked += (_, _) => SyncBox(); fixedBox.Unchecked += (_, _) => SyncBox(); SyncBox();
+        var error = Ui.Label("", 11); error.Foreground = new SolidColorBrush(Colors.OrangeRed);
+        var body = new StackPanel
+        {
+            Spacing = 10,
+            Children =
+            {
+                content,
+                Ui.Row(8, Ui.Label("Font", 11, brush: Ui.Secondary), fonts, Ui.Label("Size", 11, brush: Ui.Secondary), size, Ui.Label("px", 11, brush: Ui.Secondary)),
+                Ui.Row(8, Ui.Label("Color #", 11, brush: Ui.Secondary), color, Ui.Label("Align", 11, brush: Ui.Secondary), alignment),
+                Ui.Row(8, Ui.Label("Tracking", 11, brush: Ui.Secondary), tracking, Ui.Label("Leading", 11, brush: Ui.Secondary), leading),
+                fixedBox, boxRow, error,
+            },
+        };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot, Title = target == null ? "Add Text" : "Edit Text", Content = body,
+            PrimaryButtonText = target == null ? "Add" : "Apply", CloseButtonText = "Cancel", DefaultButton = ContentDialogButton.Primary,
+        };
+        LayerTextStyle? chosen = null;
+        dialog.PrimaryButtonClick += (_, e) =>
+        {
+            var parsed = PaletteColor.FromHex(color.Text);
+            var style = original with
+            {
+                Content = content.Text, FontName = string.IsNullOrWhiteSpace(fonts.Text) ? "Arial" : fonts.Text.Trim(),
+                FontSize = size.Value, Tracking = tracking.Value, Leading = leading.Value,
+                Red = parsed?.Red ?? double.NaN, Green = parsed?.Green ?? double.NaN, Blue = parsed?.Blue ?? double.NaN,
+                Alignment = alignment.SelectedItem is LayerTextAlignment a ? a : LayerTextAlignment.Left,
+                BoxSize = fixedBox.IsChecked == true ? new SizeD(boxWidth.Value, boxHeight.Value) : null,
+            };
+            if (!style.IsValid || (target == null && string.IsNullOrWhiteSpace(style.Content)))
+            {
+                e.Cancel = true; error.Text = "Enter valid text, font, color, and numeric settings."; return;
+            }
+            chosen = style;
+        };
+        showingDialog = true;
+        try
+        {
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary || chosen == null) return;
+        }
+        finally { showingDialog = false; }
+        if (target == null) s.AddTextLayer(chosen, point); else s.EditTextLayer(target.Id, chosen);
+        QueueRefresh();
+        canvasView.FocusCanvas();
+    }
 
     private bool Begin(EditorSession s)
     {
@@ -1275,6 +1561,36 @@ public sealed class MainWindow : Window
             await Task.Run(() => ImageExporter.WriteAtomically(data, path));
         }
         catch (Exception e) { ShowError("Couldn’t export JPEG", e.Message); }
+        finally { End(s); }
+    }
+
+    private async Task ExportSlices()
+    {
+        var s = Session;
+        if (s.Document == null || s.Slices.Count == 0 || !Begin(s)) return;
+        try
+        {
+            if (s.ProjectSnapshot() is not { } snapshot) return;
+            var folder = FileDialogs.PickFolder(Hwnd, "Export Slices");
+            if (folder == null) return;
+            var slices = s.Slices.ToArray();
+            await Task.Run(() =>
+            {
+                var rendered = ImageExporter.Render(snapshot).Image;
+                for (int i = 0; i < slices.Length; i++)
+                {
+                    var r = slices[i];
+                    int left = Math.Clamp((int)Math.Floor(r.X), 0, rendered.Width - 1);
+                    int top = Math.Clamp((int)Math.Floor(r.Y), 0, rendered.Height - 1);
+                    int right = Math.Clamp((int)Math.Ceiling(r.MaxX), left + 1, rendered.Width);
+                    int bottom = Math.Clamp((int)Math.Ceiling(r.MaxY), top + 1, rendered.Height);
+                    var cropped = rendered.Crop(new SKRectI(left, top, right, bottom));
+                    var data = Codecs.EncodePng(cropped, snapshot.Manifest.Resolution ?? 72);
+                    ImageExporter.WriteAtomically(data, Path.Combine(folder, $"slice-{i + 1:D2}.png"));
+                }
+            });
+        }
+        catch (Exception e) { ShowError("Couldnâ€™t export slices", e.Message); }
         finally { End(s); }
     }
 

@@ -91,8 +91,20 @@ public sealed class ToolOptions : UserControl
             case NavigationTool.Brush or NavigationTool.SpotHealing or NavigationTool.CloneStamp or NavigationTool.Blur: return Brush(s);
             case NavigationTool.Marquee or NavigationTool.Lasso or NavigationTool.Wand: return Selection(s);
             case NavigationTool.Gradient: return Gradient(s);
+            case NavigationTool.Type:
+                return Bar(Ui.Title("Type"), Ui.Label("Click to type or select existing text. Edit it live in Window â€º Character.", 11, brush: Ui.Secondary));
             case NavigationTool.Shape: return Shape(s);
             case NavigationTool.Crop: return Crop(s);
+            case NavigationTool.Slice:
+            {
+                var rows = Ui.Number(() => s.SliceRows, v => s.SliceRows = Math.Clamp((int)Math.Round(v), 1, 100), binder, 54, 0, 1, Release, "Slice rows");
+                var columns = Ui.Number(() => s.SliceColumns, v => s.SliceColumns = Math.Clamp((int)Math.Round(v), 1, 100), binder, 54, 0, 1, Release, "Slice columns");
+                return Bar(Ui.Title("Slice"), Ui.Label("Rows", 11, brush: Ui.Secondary), rows,
+                    Ui.Label("Columns", 11, brush: Ui.Secondary), columns,
+                    Ui.Capsule("Create Grid", () => s.CreateSliceGrid(s.SliceRows, s.SliceColumns), accent: true),
+                    Ui.Capsule("Clear", s.ClearSlices),
+                    Ui.Label("Drag on the canvas to add a custom slice.", 11, brush: Ui.Secondary));
+            }
             case NavigationTool.Eyedropper:
                 return Bar(Ui.Title("Eyedropper"), Ui.Check("Sample Ring", () => s.ShowsSampleRing, v => s.ShowsSampleRing = v, binder));
             case NavigationTool.Hand: return Bar(Ui.Title("Pan"));
@@ -317,6 +329,7 @@ public sealed class ToolOptions : UserControl
         }
         items.Add(Modify("Expand", () => s.SelectionExpandAmount, v => s.SelectionExpandAmount = v, () => s.ExpandSelection(s.SelectionExpandAmount)));
         items.Add(Modify("Contract", () => s.SelectionContractAmount, v => s.SelectionContractAmount = v, () => s.ContractSelection(s.SelectionContractAmount)));
+        items.Add(Modify("Feather", () => s.SelectionFeatherAmount, v => s.SelectionFeatherAmount = Math.Min(250, v), () => s.FeatherSelection(s.SelectionFeatherAmount)));
         if (s.Selection is { } selection)
         {
             if (selection.IsEmpty) items.Add(Ui.Label("Empty selection", brush: Ui.Secondary));
@@ -329,7 +342,7 @@ public sealed class ToolOptions : UserControl
 
     private FrameworkElement Gradient(EditorSession s)
     {
-        var swatch = new Border { Width = 56, Height = 18, CornerRadius = new CornerRadius(3), BorderBrush = Ui.Solid(128, 0, 0, 0), BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
+        var swatch = new Border { Width = 72, Height = 22, CornerRadius = new CornerRadius(4), BorderBrush = Ui.Solid(128, 0, 0, 0), BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Center };
         binder.Add(() =>
         {
             var (first, last) = s.GradientColors(false);
@@ -340,12 +353,11 @@ public sealed class ToolOptions : UserControl
         });
         var items = new List<UIElement>
         {
-            Ui.Title("Gradient"),
             Ui.Segmented(new[] { (GradientShape.Linear, "Linear"), (GradientShape.Radial, "Radial") }, () => s.GradientSettings.Shape,
                 v => s.GradientSettings = s.GradientSettings with { Shape = v }, binder, "Linear runs along the line; Radial spreads out from the start point"),
             new Border { Background = Ui.Solid(255, 191, 191, 191), CornerRadius = new CornerRadius(3), Child = swatch },
-            Ui.Picker(new[] { (GradientStyle.ForegroundToBackground, "Foreground to Background"), (GradientStyle.ForegroundToTransparent, "Foreground to Transparent") },
-                () => s.GradientSettings.Style, v => s.GradientSettings = s.GradientSettings with { Style = v }, binder),
+            Ui.Picker(new[] { (GradientStyle.ForegroundToBackground, "FG to BG"), (GradientStyle.ForegroundToTransparent, "FG to Transparent") },
+                () => s.GradientSettings.Style, v => s.GradientSettings = s.GradientSettings with { Style = v }, binder, 142),
             Ui.Check("Reverse", () => s.GradientSettings.Reversed, v => s.GradientSettings = s.GradientSettings with { Reversed = v }, binder),
             Ui.Label("Opacity"),
             Ui.Slider(0.01, 1, () => s.GradientSettings.Opacity, v => s.GradientSettings = s.GradientSettings with { Opacity = v }, binder),

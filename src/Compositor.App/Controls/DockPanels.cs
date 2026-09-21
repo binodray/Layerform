@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Compositor.Editing;
+using Compositor.Imaging;
 using Compositor.Model;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using SkiaSharp;
 
 namespace Compositor.App.Controls;
 
@@ -14,6 +16,15 @@ public sealed class UserLibrary
 {
     public List<string> Swatches { get; set; } = new();
     public List<RecordedAction> Actions { get; set; } = new();
+    public List<SavedLayer> CustomLayers { get; set; } = new();
+    public Dictionary<string, string> Shortcuts { get; set; } = new();
+
+    public sealed class SavedLayer
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+        public string Name { get; set; } = "Custom Layer";
+        public string FileName { get; set; } = "";
+    }
 
     public sealed class RecordedAction
     {
@@ -22,6 +33,7 @@ public sealed class UserLibrary
     }
 
     private static readonly string FilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LayerForm", "library.json");
+    private static readonly string LayerDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LayerForm", "custom-layers");
     private static UserLibrary? shared;
 
     public static UserLibrary Shared
@@ -32,6 +44,10 @@ public sealed class UserLibrary
             if (File.Exists(FilePath))
                 try { shared = JsonSerializer.Deserialize<UserLibrary>(File.ReadAllText(FilePath)); } catch { }
             shared ??= new UserLibrary();
+            shared.Swatches ??= new();
+            shared.Actions ??= new();
+            shared.CustomLayers ??= new();
+            shared.Shortcuts ??= new();
             if (shared.Actions.Count == 0) shared.Actions.AddRange(DefaultActions());
             return shared;
         }
@@ -55,6 +71,39 @@ public sealed class UserLibrary
             File.WriteAllText(FilePath, JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (Exception e) { Diagnostics.Log("Library save: " + e.Message); }
+    }
+
+    public bool SaveLayer(ImageLayer layer)
+    {
+        if (layer.Asset is not { } asset || layer.IsGroup) return false;
+        try
+        {
+            Directory.CreateDirectory(LayerDirectory);
+            var saved = new SavedLayer { Name = layer.Name };
+            saved.FileName = saved.Id + ".png";
+            File.WriteAllBytes(Path.Combine(LayerDirectory, saved.FileName), Codecs.EncodePng(asset.Image));
+            CustomLayers.Add(saved);
+            Save();
+            return true;
+        }
+        catch (Exception e) { Diagnostics.Log("Custom layer save: " + e.Message); return false; }
+    }
+
+    public ImageAsset? LoadLayer(SavedLayer saved)
+    {
+        try
+        {
+            var image = Codecs.DecodeRgba(File.ReadAllBytes(Path.Combine(LayerDirectory, saved.FileName)));
+            return PixelOps.Asset(image, saved.Name);
+        }
+        catch (Exception e) { Diagnostics.Log("Custom layer load: " + e.Message); return null; }
+    }
+
+    public void DeleteLayer(SavedLayer saved)
+    {
+        CustomLayers.Remove(saved);
+        try { File.Delete(Path.Combine(LayerDirectory, saved.FileName)); } catch { }
+        Save();
     }
 }
 
@@ -108,6 +157,82 @@ public abstract class DockPanel : UserControl
 
     protected void SetBody(UIElement content) => body.Content = content;
     public abstract void Refresh();
+}
+
+// MARK: Character
+
+/// <summary>Photoshop-style Character panel. It edits the active text layer directly on the canvas, without a modal dialog.</summary>
+public sealed class TextDock : DockPanel
+{
+    private readonly TextBox content = new() { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 72, PlaceholderText = "Click the canvas with the Type tool" };
+    private readonly ComboBox font = new() { IsEditable = true, HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly NumberBox size = Number(1, 2000), tracking = Number(-100, 1000), leading = Number(0, 5000);
+    private readonly NumberBox boxWidth = Number(16, 30000), boxHeight = Number(16, 30000);
+    private readonly TextBox color = new() { PlaceholderText = "RRGGBB", MaxLength = 7 };
+    private readonly ComboBox alignment = new();
+    private readonly CheckBox fixedBox = new() { Content = "Paragraph box" };
+    private bool syncing;
+    private Guid? shownLayer;
+
+    private static NumberBox Number(double min, double max) => new() { Minimum = min, Maximum = max, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
+
+    public TextDock(Func<EditorSession?> session) : base("character", "Character", session)
+    {
+        foreach (var family in SKFontManager.Default.FontFamilies.OrderBy(x => x)) font.Items.Add(family);
+        foreach (var value in Enum.GetValues<LayerTextAlignment>()) alignment.Items.Add(value);
+        content.TextChanged += (_, _) => Change(s => s with { Content = content.Text.Replace("\r\n", "\n").Replace('\r', '\n') });
+        font.LostFocus += (_, _) => Change(s => s with { FontName = string.IsNullOrWhiteSpace(font.Text) ? "Arial" : font.Text.Trim() });
+        font.SelectionChanged += (_, _) => { if (font.SelectedItem is string family) Change(s => s with { FontName = family }); };
+        size.ValueChanged += (_, e) => { if (double.IsFinite(e.NewValue)) Change(s => s with { FontSize = e.NewValue }); };
+        tracking.ValueChanged += (_, e) => { if (double.IsFinite(e.NewValue)) Change(s => s with { Tracking = e.NewValue }); };
+        leading.ValueChanged += (_, e) => { if (double.IsFinite(e.NewValue)) Change(s => s with { Leading = e.NewValue }); };
+        color.LostFocus += (_, _) => { if (PaletteColor.FromHex(color.Text) is { } c) Change(s => s with { Red = c.Red, Green = c.Green, Blue = c.Blue }); };
+        alignment.SelectionChanged += (_, _) => { if (alignment.SelectedItem is LayerTextAlignment a) Change(s => s with { Alignment = a }); };
+        fixedBox.Checked += (_, _) => Change(s => s with { BoxSize = new Compositor.Geometry.SizeD(Math.Max(16, boxWidth.Value), Math.Max(16, boxHeight.Value)) });
+        fixedBox.Unchecked += (_, _) => Change(s => s with { BoxSize = null });
+        boxWidth.ValueChanged += (_, e) => { if (double.IsFinite(e.NewValue)) Change(s => s with { BoxSize = new Compositor.Geometry.SizeD(e.NewValue, Math.Max(16, boxHeight.Value)) }); };
+        boxHeight.ValueChanged += (_, e) => { if (double.IsFinite(e.NewValue)) Change(s => s with { BoxSize = new Compositor.Geometry.SizeD(Math.Max(16, boxWidth.Value), e.NewValue) }); };
+
+        var grid = new Grid { ColumnSpacing = 8, RowSpacing = 8 };
+        grid.ColumnDefinitions.Add(new ColumnDefinition()); grid.ColumnDefinitions.Add(new ColumnDefinition());
+        void Put(FrameworkElement e, int row, int column, int span = 1) { while (grid.RowDefinitions.Count <= row) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); Grid.SetRow(e, row); Grid.SetColumn(e, column); Grid.SetColumnSpan(e, span); grid.Children.Add(e); }
+        Put(font, 0, 0, 2); Put(Labeled("Size", size), 1, 0); Put(Labeled("Leading", leading), 1, 1);
+        Put(Labeled("Tracking", tracking), 2, 0); Put(Labeled("Color #", color), 2, 1); Put(Labeled("Align", alignment), 3, 0); Put(fixedBox, 3, 1);
+        Put(Labeled("Box W", boxWidth), 4, 0); Put(Labeled("Box H", boxHeight), 4, 1);
+        SetBody(grid);
+    }
+
+    private static FrameworkElement Labeled(string label, Control field) => new StackPanel { Spacing = 3, Children = { Ui.Label(label, 10, brush: Ui.Secondary), field } };
+
+    private LayerTextStyle Current(EditorSession s) => s.ActiveLayer?.LiveText?.Style ?? s.TextDefaults;
+    private void Change(Func<LayerTextStyle, LayerTextStyle> update)
+    {
+        if (syncing || Session() is not { } s) return;
+        var next = update(Current(s));
+        if (!next.IsValid) return;
+        if (s.ActiveLayer is { LiveText: not null } layer) s.EditTextLayer(layer.Id, next); else s.TextDefaults = next;
+    }
+
+    public void FocusContent()
+    {
+        content.Focus(FocusState.Programmatic);
+        content.SelectAll();
+    }
+
+    public override void Refresh()
+    {
+        if (Session() is not { } s) return;
+        var layer = s.ActiveLayer is { LiveText: not null } text ? text : null;
+        var style = Current(s);
+        syncing = true;
+        if (content.FocusState == FocusState.Unfocused || shownLayer != layer?.Id) content.Text = style.Content;
+        font.Text = style.FontName; size.Value = style.FontSize; tracking.Value = style.Tracking; leading.Value = style.Leading;
+        color.Text = new PaletteColor(style.Red, style.Green, style.Blue).Hex; alignment.SelectedItem = style.Alignment;
+        fixedBox.IsChecked = style.BoxSize != null; boxWidth.Value = style.BoxSize?.Width ?? 600; boxHeight.Value = style.BoxSize?.Height ?? 300;
+        boxWidth.IsEnabled = boxHeight.IsEnabled = style.BoxSize != null; content.IsEnabled = layer != null;
+        shownLayer = layer?.Id;
+        syncing = false;
+    }
 }
 
 // MARK: Color
@@ -211,7 +336,7 @@ public sealed class SwatchesDock : DockPanel
             Width = 18, Height = 18, CornerRadius = new CornerRadius(4), Background = new SolidColorBrush(Ui.Color(color)),
             BorderBrush = Ui.Solid(50, 255, 255, 255), BorderThickness = new Thickness(1),
         };
-        ToolTipService.SetToolTip(chip, $"#{hex} · click: foreground · Alt-click: background" + (removable ? " · right-click: remove" : ""));
+        ToolTipService.SetToolTip(chip, $"#{hex} · click: recolor selected layer · Alt-click: background" + (removable ? " · right-click: remove" : ""));
         chip.PointerPressed += (_, e) =>
         {
             if (Session() is not { } s || !s.CanEditPalette) return;
@@ -223,12 +348,80 @@ public sealed class SwatchesDock : DockPanel
             }
             bool alt = e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Menu);
             s.SetPaletteColor(color, alt);
+            if (!alt && !s.IsMaskSelected && s.CanApplyLayerEffect) s.RecolorLayer(color, RecolorMode.Replace);
             e.Handled = true;
         };
         return chip;
     }
 
     public override void Refresh() { }
+}
+
+// MARK: Custom layers
+
+/// <summary>A device-local shelf of reusable raster layers.</summary>
+public sealed class CustomLayersDock : DockPanel
+{
+    private readonly StackPanel list = new() { Spacing = 3 };
+    private readonly Button save;
+    private string signature = "";
+
+    public CustomLayersDock(Func<EditorSession?> session) : base("customLayers", "Custom Layers", session)
+    {
+        save = Ui.IconButton(Icons.Glyph(Icons.Add, 12), SaveSelected, "Save selected layer for reuse", 24, 24);
+        SetBody(new StackPanel
+        {
+            Spacing = 8,
+            Children =
+            {
+                Ui.Row(6, Ui.Label("Reusable layers", 11, brush: Ui.Secondary), save),
+                new ScrollViewer { Content = list, MaxHeight = 220, VerticalScrollBarVisibility = ScrollBarVisibility.Auto },
+            },
+        });
+        Rebuild();
+    }
+
+    private void SaveSelected()
+    {
+        if (Session()?.ActiveLayer is not { } layer || !UserLibrary.Shared.SaveLayer(layer)) return;
+        signature = "";
+        Rebuild();
+    }
+
+    private void Rebuild()
+    {
+        list.Children.Clear();
+        foreach (var saved in UserLibrary.Shared.CustomLayers.ToList())
+        {
+            var use = new Button
+            {
+                Content = Ui.Label(saved.Name, 12), HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 4, 8, 4),
+                CornerRadius = new CornerRadius(5), BorderThickness = new Thickness(0),
+            };
+            use.Click += (_, _) =>
+            {
+                if (Session() is not { } s || UserLibrary.Shared.LoadLayer(saved) is not { } asset) return;
+                s.Insert(asset, fitToCanvas: true);
+            };
+            var remove = Ui.IconButton(Icons.Glyph(Icons.Trash, 11), () => { UserLibrary.Shared.DeleteLayer(saved); signature = ""; Rebuild(); }, $"Delete {saved.Name}", 24, 24);
+            var row = new Grid { ColumnSpacing = 4 };
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.Children.Add(use);
+            Grid.SetColumn(remove, 1);
+            row.Children.Add(remove);
+            list.Children.Add(row);
+        }
+        if (list.Children.Count == 0) list.Children.Add(Ui.Label("Select a layer, then press + to save it here.", 11, brush: Ui.Secondary));
+    }
+
+    public override void Refresh()
+    {
+        save.IsEnabled = Session()?.ActiveLayer is { Asset: not null, IsGroup: false };
+        string next = string.Join("|", UserLibrary.Shared.CustomLayers.Select(x => x.Id + x.Name));
+        if (next != signature) { signature = next; Rebuild(); }
+    }
 }
 
 // MARK: History

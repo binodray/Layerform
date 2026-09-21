@@ -6,6 +6,7 @@ using Compositor.Model;
 using Compositor.Rendering;
 using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.Geometry;
+using Microsoft.Graphics.Canvas.Text;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI;
 using Microsoft.UI.Input;
@@ -29,6 +30,18 @@ namespace Compositor.App.Controls;
 public sealed class CanvasView : UserControl
 {
     private readonly CanvasControl canvas;
+    private readonly Grid surface = new();
+    private readonly TextBox inlineText = new()
+    {
+        AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, BorderThickness = new Thickness(0),
+        Padding = new Thickness(0), Visibility = Visibility.Collapsed,
+        Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Colors.Transparent),
+        UseSystemFocusVisuals = false, IsSpellCheckEnabled = false,
+    };
+    private Guid? inlineTextLayer;
+    private bool syncingInlineText;
+    private bool focusInlineTextOnRelease;
+    private bool selectInlinePlaceholder;
     private EditorSession? session;
     public EditorSession? Session
     {
@@ -50,6 +63,8 @@ public sealed class CanvasView : UserControl
     public Func<Task>? BeforePaste;
     /// <summary>A right-click (or Shift+F10) on the canvas with a tool that has no right-drag of its own.</summary>
     public event Action<Point>? ContextMenuRequested;
+    /// <summary>Prepares the text layer under the pointer and returns true when a new placeholder was created.</summary>
+    public event Func<PointD, bool>? TextRequested;
 
     // Rendered composite cache.
     private CanvasBitmap? composite;
@@ -75,6 +90,7 @@ public sealed class CanvasView : UserControl
     private TransformDrag? transformDrag;
     private CropDrag? cropDrag;
     private CropSnap? cropSnap;
+    private PointD? sliceStart;
     private bool duplicatesTransformOnDrag;
     private PointD? selectionDragStart;
     private PointD? pixelDragStart;
@@ -96,8 +112,32 @@ public sealed class CanvasView : UserControl
     public CanvasView()
     {
         canvas = new CanvasControl { ClearColor = WinColor.FromArgb(255, 0x1B, 0x1B, 0x1B) };
+        var transparentTextChrome = new Microsoft.UI.Xaml.Media.SolidColorBrush(Colors.Transparent);
+        foreach (var key in new[]
+        {
+            "TextControlBackground", "TextControlBackgroundPointerOver", "TextControlBackgroundFocused", "TextControlBackgroundDisabled",
+            "TextControlBorderBrush", "TextControlBorderBrushPointerOver", "TextControlBorderBrushFocused", "TextControlBorderBrushDisabled",
+        }) inlineText.Resources[key] = transparentTextChrome;
         canvas.Draw += OnDraw;
-        Content = canvas;
+        surface.Children.Add(canvas);
+        surface.Children.Add(inlineText);
+        Content = surface;
+        inlineText.TextChanged += (_, _) =>
+        {
+            if (syncingInlineText || session == null || inlineTextLayer is not { } id || session.ActiveLayer?.LiveText is not { } text) return;
+            var content = inlineText.Text.Replace("\r\n", "\n").Replace('\r', '\n');
+            session.EditTextLayer(id, text.Style with { Content = content });
+            PositionInlineText();
+        };
+        inlineText.KeyDown += (_, e) =>
+        {
+            if (e.Key == VirtualKey.Escape)
+            {
+                e.Handled = true;
+                EndInlineText();
+            }
+        };
+        inlineText.LostFocus += (_, _) => EndInlineText();
         IsTabStop = true;
         AllowFocusOnInteraction = true;
         UseSystemFocusVisuals = false;
@@ -151,7 +191,64 @@ public sealed class CanvasView : UserControl
     private void OnCanvasChanged()
     {
         UpdateAntsTimer();
+        PositionInlineText();
         canvas.Invalidate();
+    }
+
+    private void BeginInlineText(bool selectPlaceholder = false)
+    {
+        if (session?.ActiveLayer is not { LiveText: { } text } layer || session.Document is not { }) return;
+        inlineTextLayer = layer.Id;
+        syncingInlineText = true;
+        inlineText.Text = text.Style.Content;
+        inlineText.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(text.Style.FontName);
+        inlineText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(WinColor.FromArgb(255,
+            (byte)Math.Round(text.Style.Red * 255), (byte)Math.Round(text.Style.Green * 255), (byte)Math.Round(text.Style.Blue * 255)));
+        syncingInlineText = false;
+        PositionInlineText();
+        inlineText.Visibility = Visibility.Visible;
+        composite = null;
+        canvas.Invalidate();
+        focusInlineTextOnRelease = true;
+        selectInlinePlaceholder = selectPlaceholder;
+    }
+
+    private void PositionInlineText()
+    {
+        if (inlineTextLayer is not { } id || session?.Document is not { } doc || doc.Layer(id) is not { LiveText: { } text } layer) return;
+        var origin = session.Viewport.ViewPoint(layer.Transform.Origin, doc.Size);
+        double padding = 12 * session.Viewport.Zoom;
+        inlineText.Margin = new Thickness(origin.X + padding, origin.Y + padding, 0, 0);
+        inlineText.HorizontalAlignment = HorizontalAlignment.Left;
+        inlineText.VerticalAlignment = VerticalAlignment.Top;
+        inlineText.Width = Math.Max(16, layer.Transform.Size.Width * session.Viewport.Zoom - padding * 2);
+        inlineText.Height = Math.Max(16, layer.Transform.Size.Height * session.Viewport.Zoom - padding * 2);
+        inlineText.FontSize = Math.Clamp(text.Style.FontSize * session.Viewport.Zoom, 8, 300);
+        inlineText.FontFamily = new Microsoft.UI.Xaml.Media.FontFamily(text.Style.FontName);
+        inlineText.TextAlignment = text.Style.Alignment switch
+        {
+            LayerTextAlignment.Center => TextAlignment.Center,
+            LayerTextAlignment.Right => TextAlignment.Right,
+            _ => TextAlignment.Left,
+        };
+        inlineText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(WinColor.FromArgb(255,
+            (byte)Math.Round(text.Style.Red * 255), (byte)Math.Round(text.Style.Green * 255), (byte)Math.Round(text.Style.Blue * 255)));
+    }
+
+    private void EndInlineText()
+    {
+        if (inlineTextLayer == null) return;
+        inlineTextLayer = null;
+        inlineText.Visibility = Visibility.Collapsed;
+        composite = null;
+        canvas.Invalidate();
+        // Collapsing the editor and redrawing the canvas can be coalesced into the same
+        // layout pass. Redraw once more after that pass so the real text layer is visible.
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            composite = null;
+            canvas.Invalidate();
+        });
     }
 
     public void Refresh()
@@ -218,7 +315,9 @@ public sealed class CanvasView : UserControl
                         compositeCrisp ? CanvasImageInterpolation.NearestNeighbor : CanvasImageInterpolation.Linear);
             }
             if (session.ShowsPixelGrid && viewport.Zoom >= PixelGridZoom) DrawPixelGrid(ds, doc, v);
+            if (session.ShowsLayoutGrid) DrawLayoutGrid(ds, doc, v);
         }
+        if (session.ShowsRulers) DrawRulers(ds, doc);
         ds.DrawRectangle(rect, WinColor.FromArgb(33, 255, 255, 255), (float)(1 / Scale));
         DrawOverlays(ds, doc);
     }
@@ -287,7 +386,7 @@ public sealed class CanvasView : UserControl
         compositePixels?.Dispose();
         compositePixels = PixelOps.NewRgba(width, height);
         using (var surface = new RenderSurface(compositePixels, compositeMapping))
-            session!.RenderCanvas(surface);
+            session!.RenderCanvas(surface, inlineText.Visibility == Visibility.Visible ? inlineTextLayer : null);
         composite?.Dispose();
         composite = CanvasBitmap.CreateFromBytes(creator, compositePixels.GetPixelSpan().ToArray(), width, height,
             Windows.Graphics.DirectX.DirectXPixelFormat.R8G8B8A8UIntNormalized, dpi, CanvasAlphaMode.Premultiplied);
@@ -303,7 +402,7 @@ public sealed class CanvasView : UserControl
         if ((long)w * h > (long)compositePixels.Width * compositePixels.Height / 2) return false;
         using var part = PixelOps.NewRgba(w, h);
         using (var surface = new RenderSurface(part, compositeMapping.Concat(Affine.Translation(-x, -y))))
-            session!.RenderCanvas(surface);
+            session!.RenderCanvas(surface, inlineText.Visibility == Visibility.Visible ? inlineTextLayer : null);
         var source = part.GetPixelSpan();
         var target = compositePixels.GetPixelSpan();
         var bytes = new byte[w * h * 4];
@@ -333,6 +432,70 @@ public sealed class CanvasView : UserControl
             float y = (float)viewport.ViewPoint(new PointD(0, row), doc.Size).Y;
             ds.FillRectangle((float)visible.X, y - hairline / 2, (float)visible.Width, hairline, color);
         }
+    }
+
+    private void DrawLayoutGrid(CanvasDrawingSession ds, CanvasDocument doc, Rect visible)
+    {
+        var viewport = session!.Viewport;
+        var first = viewport.DocumentPoint(new PointD(visible.X, visible.Y), doc.Size);
+        var last = viewport.DocumentPoint(new PointD(visible.Right, visible.Bottom), doc.Size);
+        int spacing = Math.Clamp(session.GridSpacing, 1, 1000);
+        int majorSpacing = spacing * 8;
+        int step = viewport.Zoom * spacing >= 3 ? spacing : majorSpacing;
+        float hairline = (float)(1 / Scale);
+        for (int column = (int)Math.Ceiling(first.X / step) * step; column <= last.X; column += step)
+        {
+            bool major = column % majorSpacing == 0;
+            float x = (float)viewport.ViewPoint(new PointD(column, 0), doc.Size).X;
+            ds.FillRectangle(x - hairline / 2, (float)visible.Y, hairline, (float)visible.Height,
+                WinColor.FromArgb(major ? (byte)145 : (byte)75, 84, 156, 255));
+        }
+        for (int row = (int)Math.Ceiling(first.Y / step) * step; row <= last.Y; row += step)
+        {
+            bool major = row % majorSpacing == 0;
+            float y = (float)viewport.ViewPoint(new PointD(0, row), doc.Size).Y;
+            ds.FillRectangle((float)visible.X, y - hairline / 2, (float)visible.Width, hairline,
+                WinColor.FromArgb(major ? (byte)145 : (byte)75, 84, 156, 255));
+        }
+    }
+
+    private void DrawRulers(CanvasDrawingSession ds, CanvasDocument doc)
+    {
+        const float thickness = 20;
+        // Match the editor workspace; the ruler should read as a subtle overlay, not a differently coloured panel.
+        var background = WinColor.FromArgb(255, 0x1B, 0x1B, 0x1B);
+        var line = WinColor.FromArgb(255, 138, 138, 142);
+        ds.FillRectangle(0, 0, (float)ActualWidth, thickness, background);
+        ds.FillRectangle(0, 0, thickness, (float)ActualHeight, background);
+        double target = 72 / Math.Max(session!.Viewport.Zoom, 0.0001);
+        double magnitude = Math.Pow(10, Math.Floor(Math.Log10(target)));
+        double normalized = target / magnitude;
+        double interval = (normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10) * magnitude;
+        double minor = interval / 10;
+        using var label = new CanvasTextFormat { FontFamily = "Segoe UI", FontSize = 9 };
+        for (double x = 0; x <= doc.Width; x += minor)
+        {
+            float vx = View(doc, new PointD(x, 0)).X;
+            if (vx < thickness || vx > ActualWidth) continue;
+            bool major = Math.Abs(x / interval - Math.Round(x / interval)) < 0.001;
+            ds.DrawLine(vx, major ? 11 : 15, vx, thickness, line, 1);
+            if (major) ds.DrawText(Math.Round(x).ToString(), vx + 3, 1, line, label);
+        }
+        for (double y = 0; y <= doc.Height; y += minor)
+        {
+            float vy = View(doc, new PointD(0, y)).Y;
+            if (vy < thickness || vy > ActualHeight) continue;
+            bool major = Math.Abs(y / interval - Math.Round(y / interval)) < 0.001;
+            ds.DrawLine(major ? 11 : 15, vy, thickness, vy, line, 1);
+            if (major)
+            {
+                var old = ds.Transform;
+                ds.Transform = Matrix3x2.CreateRotation(-(float)Math.PI / 2, new Vector2(10, vy + 3));
+                ds.DrawText(Math.Round(y).ToString(), 12, vy - 3, line, label);
+                ds.Transform = old;
+            }
+        }
+        ds.FillRectangle(0, 0, thickness, thickness, background);
     }
 
     // MARK: Overlays (TransformOverlay.swift, BrushCursorOverlay.swift, SampleRingOverlay.swift)
@@ -416,11 +579,27 @@ public sealed class CanvasView : UserControl
         DrawSelection(ds, doc);
         DrawLassoDraft(ds, doc);
         DrawShapeDraft(ds, doc);
+        DrawSlices(ds, doc);
         DrawSnapGuides(ds, doc);
         DrawBrushCursor(ds, doc);
         DrawTransformRotationCursor(ds);
         DrawZoomCursor(ds);
         DrawSampleRing(ds);
+    }
+
+    private void DrawSlices(CanvasDrawingSession ds, CanvasDocument doc)
+    {
+        var slices = session!.Slices.Concat(session.SliceDraft is { } draft ? new[] { draft } : Array.Empty<RectD>()).ToList();
+        for (int i = 0; i < slices.Count; i++)
+        {
+            var slice = slices[i];
+            var a = View(doc, slice.Origin);
+            var b = View(doc, new PointD(slice.MaxX, slice.MaxY));
+            var view = new Rect(Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Abs(b.X - a.X), Math.Abs(b.Y - a.Y));
+            ds.DrawRectangle(view, WinColor.FromArgb(255, 0, 180, 255), 1.5f);
+            ds.FillRectangle(new Rect(view.X + 2, view.Y + 2, 24, 18), WinColor.FromArgb(210, 0, 110, 190));
+            ds.DrawText((i + 1).ToString(), (float)view.X + 7, (float)view.Y + 3, Colors.White);
+        }
     }
 
     private void DrawSnapGuides(CanvasDrawingSession ds, CanvasDocument doc)
@@ -854,6 +1033,10 @@ public sealed class CanvasView : UserControl
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        // Let the native TextBox own clicks inside an active text layer. Without this
+        // guard the canvas steals focus on every click, immediately closing the editor
+        // before users can place a caret, select a word, or press Delete.
+        if (inlineText.Visibility == Visibility.Visible && e.OriginalSource is not CanvasControl) return;
         Focus(FocusState.Pointer);
         var s = session;
         if (s?.Document is not { } doc || s.IsProjectBusy || s.IsImporting) return;
@@ -913,8 +1096,18 @@ public sealed class CanvasView : UserControl
         }
         else if (s.Tool.IsSelectionTool()) LassoPressed(pixel, point, shift, alt, ctrl, doubleClick);
         else if (s.Tool == NavigationTool.Gradient) BeginGradientDrag(point, doc);
+        else if (s.Tool == NavigationTool.Type)
+        {
+            bool created = TextRequested?.Invoke(pixel) ?? false;
+            BeginInlineText(created);
+        }
         else if (s.Tool == NavigationTool.Shape) s.BeginShape(pixel);
         else if (s.Tool == NavigationTool.Crop) BeginCropDrag(point, doc);
+        else if (s.Tool == NavigationTool.Slice)
+        {
+            sliceStart = pixel;
+            s.SliceDraft = new RectD(pixel, SizeD.Zero);
+        }
         else if (s.Tool == NavigationTool.Move) BeginTransformDrag(point, pixel, alt, ctrl);
         else if (s.Tool == NavigationTool.Zoom) zoomDrag = (point, s.Viewport.Zoom, false);
         canvas.Invalidate();
@@ -1007,6 +1200,12 @@ public sealed class CanvasView : UserControl
             return;
         }
         if (cropDrag is { } crop && s.Tool == NavigationTool.Crop && !s.IsProjectBusy) { DragCrop(crop, point, alt, ctrl); return; }
+        if (sliceStart is { } slice && s.Tool == NavigationTool.Slice)
+        {
+            s.SliceDraft = new RectD(slice, new SizeD(pixel.X - slice.X, pixel.Y - slice.Y));
+            canvas.Invalidate();
+            return;
+        }
         if (transformDrag is { } transform)
         {
             if (duplicatesTransformOnDrag) { duplicatesTransformOnDrag = false; s.BeginDuplicateTransform(); }
@@ -1038,6 +1237,15 @@ public sealed class CanvasView : UserControl
         var point = e.GetCurrentPoint(this).Position;
         bool alt = e.KeyModifiers.HasFlag(VirtualKeyModifiers.Menu);
         EndCapture(e);
+        if (focusInlineTextOnRelease && inlineTextLayer != null && inlineText.Visibility == Visibility.Visible)
+        {
+            focusInlineTextOnRelease = false;
+            inlineText.Focus(FocusState.Programmatic);
+            if (selectInlinePlaceholder) inlineText.SelectAll();
+            else inlineText.Select(inlineText.Text.Length, 0);
+            e.Handled = true;
+            return;
+        }
         StopAutoscroll();
         if (s?.Document is not { } doc) return;
         if (brushTipDrag != null) { brushTipDrag = null; brushPointer = point; canvas.Invalidate(); return; }
@@ -1056,6 +1264,7 @@ public sealed class CanvasView : UserControl
         }
         if (gradientDrag != null) { gradientDrag = null; s.EndGradientDrag(); }
         if (s.ShapeDraft != null) s.FinishShape();
+        if (sliceStart != null && s.SliceDraft is { } sliceRect) { sliceStart = null; s.CommitSlice(sliceRect); }
         if (hueTargetStart != null) { hueTargetStart = null; s.EndHueTargeting(); }
         if (pixelDragStart != null) { pixelDragStart = null; await s.FinishPixelMove(); }
         if (selectionDragStart is { } start)
@@ -1255,6 +1464,9 @@ public sealed class CanvasView : UserControl
 
     private void OnKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // TextBox key events bubble through CanvasView. Do not interpret Backspace/Delete
+        // as layer deletion (or letters as tool shortcuts) while editing text in place.
+        if (inlineText.Visibility == Visibility.Visible && e.OriginalSource is not CanvasControl) return;
         var s = session;
         if (s == null) return;
         var key = e.Key;
@@ -1320,6 +1532,7 @@ public sealed class CanvasView : UserControl
             case VirtualKey.J: s.SelectTool(NavigationTool.SpotHealing); return true;
             case VirtualKey.S: s.SelectTool(NavigationTool.CloneStamp); return true;
             case VirtualKey.G: s.SelectTool(NavigationTool.Gradient); return true;
+            case VirtualKey.T: s.SelectTool(NavigationTool.Type); return true;
             case VirtualKey.U:
                 if (shift && s.Tool == NavigationTool.Shape) s.ToggleShapeKind(); else s.SelectTool(NavigationTool.Shape);
                 return true;
@@ -1330,6 +1543,7 @@ public sealed class CanvasView : UserControl
             case VirtualKey.A: s.SelectTool(NavigationTool.Idle); return true;
             case VirtualKey.R: s.SelectTool(NavigationTool.Blur); return true;
             case VirtualKey.C: s.SelectTool(NavigationTool.Crop); return true;
+            case VirtualKey.K: s.SelectTool(NavigationTool.Slice); return true;
             case VirtualKey.V: s.SelectTool(NavigationTool.Move); return true;
             case VirtualKey.H: s.SelectTool(NavigationTool.Hand); return true;
             case VirtualKey.Z: s.SelectTool(NavigationTool.Zoom); return true;

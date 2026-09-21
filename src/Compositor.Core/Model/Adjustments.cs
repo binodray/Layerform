@@ -2,7 +2,7 @@ namespace Compositor.Model;
 
 public enum LayerBlendMode
 {
-    Normal, Multiply, Screen, Overlay, Darken, Lighten, Difference, ColorDodge, ColorBurn, Hue, Saturation, Color, Luminosity,
+    Normal, Multiply, Screen, Overlay, SoftLight, Darken, Lighten, Difference, ColorDodge, ColorBurn, Hue, Saturation, Color, Luminosity,
 }
 
 public static class BlendModes
@@ -12,6 +12,7 @@ public static class BlendModes
     {
         LayerBlendMode.ColorDodge => "Color Dodge",
         LayerBlendMode.ColorBurn => "Color Burn",
+        LayerBlendMode.SoftLight => "Soft Light",
         _ => mode.ToString(),
     };
     public static bool TryParse(string? name, out LayerBlendMode mode)
@@ -27,6 +28,7 @@ public static class BlendModes
         LayerBlendMode.Multiply => SkiaSharp.SKBlendMode.Multiply,
         LayerBlendMode.Screen => SkiaSharp.SKBlendMode.Screen,
         LayerBlendMode.Overlay => SkiaSharp.SKBlendMode.Overlay,
+        LayerBlendMode.SoftLight => SkiaSharp.SKBlendMode.SoftLight,
         LayerBlendMode.Darken => SkiaSharp.SKBlendMode.Darken,
         LayerBlendMode.Lighten => SkiaSharp.SKBlendMode.Lighten,
         LayerBlendMode.Difference => SkiaSharp.SKBlendMode.Difference,

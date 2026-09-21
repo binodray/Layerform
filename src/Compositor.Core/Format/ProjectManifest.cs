@@ -14,7 +14,7 @@ public sealed class ProjectException : Exception
     private static string Describe(ProjectErrorKind kind, int? version) => kind switch
     {
         ProjectErrorKind.Invalid => "This is not a valid Compositor project, or its metadata is damaged.",
-        ProjectErrorKind.Version => $"This project uses format version {version}. This app supports versions 1–7.",
+        ProjectErrorKind.Version => $"This project uses format version {version}. This app supports versions 1–8.",
         ProjectErrorKind.MissingImage => "An image inside the project is missing or damaged. The current document has not been replaced.",
         ProjectErrorKind.TooLarge => "This project exceeds the supported canvas, layer, file-size, or 100-megapixel image limit.",
         _ => "An image could not be saved. The previous project has not been replaced.",
@@ -31,6 +31,7 @@ public sealed record ProjectLayerRecord
     public Guid Id { get; init; }
     public string Name { get; init; } = "";
     public bool IsVisible { get; init; } = true;
+    public bool? IsLocked { get; init; }
     public LayerTransform Transform { get; init; }
     public string? ImageFile { get; init; }
     public Guid? ParentId { get; init; }
@@ -46,6 +47,7 @@ public sealed record ProjectLayerRecord
     /// <summary>Null (older projects) is linked.</summary>
     public bool? MaskLinked { get; init; }
     public LayerShapeStyle? Shape { get; init; }
+    public LayerTextStyle? Text { get; init; }
 
     public static string ImageFileName(Guid id) => $"{ProjectJson.FormatGuid(id)}.png";
     public static string MaskFileName(Guid id) => $"{ProjectJson.FormatGuid(id)}.mask.png";
@@ -54,7 +56,7 @@ public sealed record ProjectLayerRecord
 public sealed record ProjectManifest
 {
     public const string FormatIdentifier = "com.compositor.project";
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
     public string Format { get; init; } = FormatIdentifier;
     public int Version { get; init; } = CurrentVersion;
     public string ColorSpace { get; init; } = "sRGB";

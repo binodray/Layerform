@@ -37,7 +37,8 @@ public static class SelectionRaster
     /// <summary>Coverage for just the selected part of the canvas, ready to clip edits.</summary>
     public static SelectionClip Clip(this DocumentSelection selection, SizeD canvas)
     {
-        var region = selection.Bounds.Inset(-1, -1).Integral.Intersect(new RectD(0, 0, canvas.Width, canvas.Height));
+        var spread = Math.Ceiling(selection.Feather * 2) + 1;
+        var region = selection.Bounds.Inset(-spread, -spread).Integral.Intersect(new RectD(0, 0, canvas.Width, canvas.Height));
         if (selection.IsEmpty || region.IsNull || region.Width < 1 || region.Height < 1) return new SelectionClip(RectD.Zero, null);
         using var alpha = PixelOps.NewAlpha((int)region.Width, (int)region.Height);
         using (var canvasSk = new SKCanvas(alpha))
@@ -46,7 +47,7 @@ public static class SelectionRaster
             using var paint = FillPaint(selection.Antialiased);
             canvasSk.DrawPath(selection.SharedPath, paint);
         }
-        return new SelectionClip(region, PixelOps.AlphaToMaskCopy(alpha));
+        return new SelectionClip(region, Blurred(alpha, selection.Feather));
     }
 
     /// <summary>Grayscale coverage at document resolution (white = selected).</summary>
@@ -58,7 +59,18 @@ public static class SelectionRaster
             using var paint = FillPaint(selection.Antialiased);
             canvas.DrawPath(selection.SharedPath, paint);
         }
-        return PixelOps.AlphaToMaskCopy(alpha);
+        return Blurred(alpha, selection.Feather);
+    }
+
+    private static MaskImage Blurred(SKBitmap alpha, double feather)
+    {
+        if (feather <= 0) return PixelOps.AlphaToMaskCopy(alpha);
+        using var blurred = PixelOps.NewAlpha(alpha.Width, alpha.Height);
+        using (var canvas = new SKCanvas(blurred))
+        using (var image = SKImage.FromBitmap(alpha))
+        using (var paint = new SKPaint { ImageFilter = SKImageFilter.CreateBlur((float)(feather / 2), (float)(feather / 2)), BlendMode = SKBlendMode.Src })
+            canvas.DrawImage(image, 0, 0, paint);
+        return PixelOps.AlphaToMaskCopy(blurred);
     }
 
     /// <summary>Selection coverage rasterized on an image's own pixel grid (PixelAdjust.coverage).</summary>

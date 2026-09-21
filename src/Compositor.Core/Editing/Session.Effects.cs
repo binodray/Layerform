@@ -100,7 +100,7 @@ public static class LayerEffects
 public sealed partial class EditorSession
 {
     /// <summary>A pixel layer (not a folder or adjustment) whose look can be changed.</summary>
-    public bool CanApplyLayerEffect => CanEditLayers && ActiveLayer is { IsGroup: false, Adjustment: null, Asset: not null } && SelectedLayerIds.Count <= 1;
+    public bool CanApplyLayerEffect => CanEditLayers && ActiveLayer is { IsLocked: false, IsGroup: false, Adjustment: null, Asset: not null } && SelectedLayerIds.Count <= 1;
 
     /// <summary>Replaces the active layer's pixels with <paramref name="effect"/> of them. A shape layer stays a shape when it
     /// is simply recoloured (so it can still be resized cleanly); otherwise it becomes ordinary pixels.</summary>
@@ -116,8 +116,11 @@ public sealed partial class EditorSession
         EndEdit();
     }
 
-    public void RecolorLayer(PaletteColor color, RecolorMode mode) =>
+    public void RecolorLayer(PaletteColor color, RecolorMode mode)
+    {
+        if (mode == RecolorMode.Replace && RecolorText(color)) return;
         ApplyLayerEffect("Change Color", image => LayerEffects.Recolor(image, color, mode), mode == RecolorMode.Replace ? color : null);
+    }
 
     public void GradientOverlayLayer(GradientOverlaySettings settings) =>
         ApplyLayerEffect("Gradient Overlay", image => LayerEffects.GradientOverlay(image, settings));

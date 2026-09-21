@@ -45,8 +45,8 @@ public sealed partial class EditorSession
         && RenamingLayerId == null && CropRect == null && GradientEdit == null && PixelMove == null && HueSaturation == null && Levels == null
         && FilterEdit == null && AdjustmentEditingId == null && (TransformEditState == null || TransformEditState.Persistent);
 
-    public bool CanAlign => CanArrange && AlignUnits().Count > 0;
-    public bool CanDistribute => CanArrange && AlignUnits().Count >= 3;
+    public bool CanAlign => CanArrange && !SelectedLayersLocked && AlignUnits().Count > 0;
+    public bool CanDistribute => CanArrange && !SelectedLayersLocked && AlignUnits().Count >= 3;
 
     /// <summary>What one layer aligns to: the selection if there is one, otherwise the canvas.</summary>
     public string AlignReference => AlignUnits().Count > 1 ? "the selected layers" : Selection is { IsEmpty: false } ? "the selection" : "the canvas";

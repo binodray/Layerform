@@ -336,7 +336,7 @@ public sealed partial class EditorSession
 
     public bool CanAdjustColors => Levels == null && FilterEdit == null && document != null && ActiveLayer is { } layer && !IsProjectBusy && !IsImporting
         && brushStroke == null && PixelMove == null && RenamingLayerId == null && SelectedLayerIds.Count == 1 && !layer.IsGroup && !IsMaskSelected
-        && layer.Asset != null && EffectiveVisibleIds.Contains(layer.Id) && Selection?.IsEmpty != true;
+        && !layer.IsLocked && layer.Asset != null && EffectiveVisibleIds.Contains(layer.Id) && Selection?.IsEmpty != true;
 
     public bool CanContentAwareFill => CanAdjustColors && !IsMaskSelected && Selection?.IsEmpty == false && FilterEdit == null && HueSaturation == null;
 

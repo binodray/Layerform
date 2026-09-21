@@ -30,7 +30,17 @@ public sealed class SnapshotCompositeSource : ICompositeSource
     public Guid? Parent(Guid id) => records.TryGetValue(id, out var r) ? r.ParentId : null;
     public Guid? MaskSource(Guid id) => records.TryGetValue(id, out var r) ? r.MaskSourceId : null;
     public LayerAdjustment? Adjustment(Guid id) => records.TryGetValue(id, out var r) ? r.Adjustment : null;
-    public double Opacity(Guid id) => records.TryGetValue(id, out var r) ? r.Opacity ?? 1 : 1;
+    public double Opacity(Guid id)
+    {
+        double opacity = records.TryGetValue(id, out var r) ? r.Opacity ?? 1 : 1;
+        var parent = Parent(id);
+        for (int depth = 0; parent is { } p && depth < 64; depth++)
+        {
+            opacity *= records.TryGetValue(p, out var folder) ? folder.Opacity ?? 1 : 1;
+            parent = Parent(p);
+        }
+        return Math.Clamp(opacity, 0, 1);
+    }
     public LayerBlendMode Blend(Guid id) => records.TryGetValue(id, out var r) ? r.BlendMode ?? LayerBlendMode.Normal : LayerBlendMode.Normal;
 
     public ClipMask? FolderClip(Guid folderId)
@@ -47,7 +57,7 @@ public sealed class SnapshotCompositeSource : ICompositeSource
         var mask = snapshot.Mask(layer) is { } owned
             ? MaskPlacement.ClipImage(owned, owned.Placement, layer.Transform, asset.Image.Width, asset.Image.Height)
             : null;
-        LayerRenderer.Draw(surface, asset.Image, layer.Transform, layer.Opacity ?? 1, layer.BlendMode ?? LayerBlendMode.Normal, mask, clips);
+        LayerRenderer.Draw(surface, asset.Image, layer.Transform, Opacity(id), layer.BlendMode ?? LayerBlendMode.Normal, mask, clips);
     }
 }
 

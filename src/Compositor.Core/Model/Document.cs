@@ -77,6 +77,37 @@ public sealed record LayerShape(LayerShapeStyle Style, RasterImage Image)
     public override int GetHashCode() => Style.GetHashCode();
 }
 
+public enum LayerTextAlignment { Left, Center, Right }
+
+/// <summary>Editable text metadata. The raster image remains the fallback for older Compositor versions.</summary>
+public sealed record LayerTextStyle
+{
+    public string Content { get; init; } = "Text";
+    public string FontName { get; init; } = "Arial";
+    public double FontSize { get; init; } = 72;
+    public double Red { get; init; }
+    public double Green { get; init; }
+    public double Blue { get; init; }
+    public LayerTextAlignment Alignment { get; init; }
+    public double Tracking { get; init; }
+    public double Leading { get; init; }
+    public SizeD? BoxSize { get; init; }
+    public double LineHeight => Leading > 0 ? Leading : FontSize * 1.2;
+    public bool IsValid => Content.Length <= 100_000 && !string.IsNullOrWhiteSpace(FontName)
+        && double.IsFinite(FontSize) && FontSize is >= 1 and <= 2000
+        && new[] { Red, Green, Blue }.All(v => double.IsFinite(v) && v is >= 0 and <= 1)
+        && double.IsFinite(Tracking) && Tracking is >= -100 and <= 1000
+        && double.IsFinite(Leading) && Leading is >= 0 and <= 5000
+        && (BoxSize is not { } box || double.IsFinite(box.Width) && double.IsFinite(box.Height)
+            && box.Width >= 16 && box.Height >= 16 && box.Width <= 30_000 && box.Height <= 30_000 && box.Width * box.Height <= 100_000_000);
+}
+
+public sealed record LayerText(LayerTextStyle Style, RasterImage Image)
+{
+    public bool Equals(LayerText? other) => other is not null && Style == other.Style && ReferenceEquals(Image, other.Image);
+    public override int GetHashCode() => HashCode.Combine(Style, Image);
+}
+
 /// <summary>Immutable, normalized layer-local coverage (white reveals, black hides).</summary>
 public sealed record LayerMask(MaskAsset Asset, bool IsEnabled = true, LayerTransform? Placement = null, bool IsLinked = true)
 {
@@ -108,6 +139,7 @@ public sealed record ImageLayer
     public LayerTransform Transform { get; init; }
     public string Name { get; init; } = "";
     public bool IsVisible { get; init; } = true;
+    public bool IsLocked { get; init; }
     public Guid? ParentId { get; init; }
     public bool IsGroup { get; init; }
     public double Opacity { get; init; } = 1;
@@ -116,6 +148,7 @@ public sealed record ImageLayer
     public LayerMask? Mask { get; init; }
     public LayerAdjustment? Adjustment { get; init; }
     public LayerShape? Shape { get; init; }
+    public LayerText? Text { get; init; }
 
     public SizeD Size => Transform.Size;
     public PointD Origin => Transform.Origin;
@@ -123,6 +156,7 @@ public sealed record ImageLayer
     public LayerTransform MaskTransform => Mask?.Placement ?? Transform;
     /// <summary>The shape this layer still is: null once its pixels were edited some other way.</summary>
     public LayerShape? LiveShape => Shape is { } s && Asset is { } a && ReferenceEquals(a.Image, s.Image) ? s : null;
+    public LayerText? LiveText => Text is { } t && Asset is { } a && ReferenceEquals(a.Image, t.Image) ? t : null;
 
     public static ImageLayer FromAsset(ImageAsset asset, PointD origin) => new()
     {
@@ -135,10 +169,10 @@ public sealed record ImageLayer
         Id = Guid.NewGuid(), Name = name, Transform = new LayerTransform(PointD.Zero, size),
     };
 
-    public bool Equals(ImageLayer? other) => other is not null && Id == other.Id && Name == other.Name && IsVisible == other.IsVisible
+    public bool Equals(ImageLayer? other) => other is not null && Id == other.Id && Name == other.Name && IsVisible == other.IsVisible && IsLocked == other.IsLocked
         && Transform == other.Transform && ReferenceEquals(Asset?.Image, other.Asset?.Image) && ParentId == other.ParentId
         && IsGroup == other.IsGroup && Opacity == other.Opacity && BlendMode == other.BlendMode && Equals(Mask, other.Mask)
-        && MaskSourceId == other.MaskSourceId && Equals(Adjustment, other.Adjustment) && Equals(Shape, other.Shape);
+        && MaskSourceId == other.MaskSourceId && Equals(Adjustment, other.Adjustment) && Equals(Shape, other.Shape) && Equals(Text, other.Text);
     public override int GetHashCode() => Id.GetHashCode();
 }
 
@@ -148,10 +182,12 @@ public sealed class DocumentSelection
 {
     private readonly SKPath path;
     public bool Antialiased { get; }
-    public DocumentSelection(SKPath path, bool antialiased = true)
+    public double Feather { get; }
+    public DocumentSelection(SKPath path, bool antialiased = true, double feather = 0)
     {
         this.path = new SKPath(path) { FillType = SKPathFillType.Winding };
         Antialiased = antialiased;
+        Feather = Math.Clamp(double.IsFinite(feather) ? feather : 0, 0, 250);
     }
     /// <summary>A copy of the outline (callers may change it).</summary>
     public SKPath Path => new(path);
@@ -163,11 +199,11 @@ public sealed class DocumentSelection
     {
         var copy = new SKPath(path);
         copy.Transform(t.ToSK());
-        return new DocumentSelection(copy, Antialiased);
+        return new DocumentSelection(copy, Antialiased, Feather);
     }
-    public override bool Equals(object? obj) => obj is DocumentSelection other && Antialiased == other.Antialiased
+    public override bool Equals(object? obj) => obj is DocumentSelection other && Antialiased == other.Antialiased && Feather == other.Feather
         && (ReferenceEquals(path, other.path) || path.ToSvgPathData() == other.path.ToSvgPathData());
-    public override int GetHashCode() => Antialiased.GetHashCode();
+    public override int GetHashCode() => HashCode.Combine(Antialiased, Feather);
 }
 
 public sealed record CanvasDocument

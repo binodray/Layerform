@@ -48,7 +48,7 @@ public sealed partial class EditorSession
 
     public void GroupSelectedLayers()
     {
-        if (!CanEditLayers || document == null || document.Layers.Count >= 10_000) return;
+        if (!CanEditLayers || SelectedLayersLocked || document == null || document.Layers.Count >= 10_000) return;
         var byId = document.Layers.ToDictionary(l => l.Id);
         var selected = SelectedLayerIds.Where(byId.ContainsKey).ToHashSet();
         List<Guid?> Ancestors(Guid id)
@@ -116,7 +116,8 @@ public sealed partial class EditorSession
 
     public bool CanPlaceLayer(Guid id, Guid? parent)
     {
-        if (!CanEditLayers || document?.IndexOf(id) < 0) return false;
+        if (!CanEditLayers || document?.Layer(id) is not { IsLocked: false }) return false;
+        if (parent is { } destination && document.Layer(destination)?.IsLocked == true) return false;
         if (parent is not { } p) return true;
         return p != id && !DescendantIds(id).Contains(p) && document!.Layer(p)?.IsGroup == true;
     }
@@ -307,11 +308,12 @@ public sealed partial class EditorSession
 
     public void PreviewBlendMode(LayerBlendMode? mode, Guid? id)
     {
-        BlendPreview = mode is { } m && id is { } i && i == ActiveLayerId && CanEditAppearance ? (i, m) : null;
+        BlendPreview = mode is { } m && id is { } i && i == ActiveLayerId && CanEditBlendAppearance ? (i, m) : null;
         InvalidateCanvas();
     }
 
-    public bool CanEditAppearance => CanEditLayers && SelectedLayerIds.Count == 1 && ActiveLayer?.IsGroup == false;
+    public bool CanEditAppearance => CanEditLayers && SelectedLayerIds.Count == 1 && ActiveLayer is { IsLocked: false };
+    public bool CanEditBlendAppearance => CanEditAppearance && ActiveLayer?.IsGroup == false;
 
     public void BeginOpacityEdit()
     {
@@ -343,7 +345,7 @@ public sealed partial class EditorSession
         if (!double.IsFinite(opacity) || !CanEditLayers || document == null) return;
         double value = Math.Clamp(opacity, 0, 1);
         var indices = Enumerable.Range(0, document.Layers.Count)
-            .Where(i => SelectedLayerIds.Contains(document.Layers[i].Id) && !document.Layers[i].IsGroup && document.Layers[i].Opacity != value).ToList();
+            .Where(i => SelectedLayerIds.Contains(document.Layers[i].Id) && document.Layers[i].Opacity != value).ToList();
         if (indices.Count == 0) return;
         FinishOpacityEdit();
         BeginEdit("Layer Opacity");
@@ -353,7 +355,7 @@ public sealed partial class EditorSession
 
     public void CycleBlendMode(bool forward)
     {
-        if (!CanEditAppearance || ActiveLayer is not { } layer) return;
+        if (!CanEditBlendAppearance || ActiveLayer is not { } layer) return;
         var modes = BlendModes.All;
         int index = Array.IndexOf(modes, layer.BlendMode);
         SetLayerBlendMode(modes[(index + (forward ? 1 : modes.Length - 1)) % modes.Length]);
@@ -362,7 +364,7 @@ public sealed partial class EditorSession
     public void SetLayerBlendMode(LayerBlendMode mode)
     {
         BlendPreview = null;
-        if (!CanEditAppearance || ActiveLayerId is not { } id || document!.IndexOf(id) is not (>= 0 and var index)) return;
+        if (!CanEditBlendAppearance || ActiveLayerId is not { } id || document!.IndexOf(id) is not (>= 0 and var index)) return;
         FinishOpacityEdit();
         BeginEdit("Layer Blend Mode");
         ReplaceLayer(index, document.Layers[index] with { BlendMode = mode });
@@ -371,7 +373,7 @@ public sealed partial class EditorSession
 
     // MARK: Masks (LayerMask.swift)
 
-    public bool CanEditMask => CanEditLayers && SelectedLayerIds.Count == 1 && ActiveLayer != null;
+    public bool CanEditMask => CanEditLayers && SelectedLayerIds.Count == 1 && ActiveLayer is { IsLocked: false };
 
     public void SelectLayerTarget(Guid id, bool mask)
     {
@@ -463,7 +465,7 @@ public sealed partial class EditorSession
 
     public void ToggleMaskLink(Guid id)
     {
-        if (!CanEditLayers || document?.Layer(id) is not { Mask: { } mask }) return;
+        if (!CanEditLayers || document?.Layer(id) is not { IsLocked: false, Mask: { } mask }) return;
         CommitTransform();
         FinishOpacityEdit();
         BeginEdit(mask.IsLinked ? "Unlink Layer Mask" : "Link Layer Mask");

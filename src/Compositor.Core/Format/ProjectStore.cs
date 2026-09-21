@@ -27,7 +27,7 @@ public static class ProjectStore
     public static void Validate(ProjectManifest manifest)
     {
         if (manifest.Format != ProjectManifest.FormatIdentifier) throw ProjectException.Invalid();
-        if (manifest.Version < 1 || manifest.Version > 7) throw new ProjectException(ProjectErrorKind.Version, manifest.Version);
+        if (manifest.Version < 1 || manifest.Version > 8) throw new ProjectException(ProjectErrorKind.Version, manifest.Version);
         if (manifest.ColorSpace != "sRGB") throw ProjectException.Invalid();
         if (manifest.Resolution is { } resolution && !(double.IsFinite(resolution) && resolution >= 1 && resolution <= 9600))
             throw ProjectException.Invalid();
@@ -35,6 +35,8 @@ public static class ProjectStore
             throw ProjectException.TooLarge();
         foreach (var layer in manifest.Layers)
         {
+            if (layer.Text is { } text && !(manifest.Version >= 8 && text.IsValid && layer.IsGroup != true && layer.ImageFile != null && layer.Adjustment == null))
+                throw ProjectException.Invalid();
             if (layer.Adjustment is { } adjustment &&
                 !(manifest.Version >= 7 && layer.IsGroup != true && layer.ImageFile == null && adjustment.IsValid))
                 throw ProjectException.Invalid();
@@ -48,7 +50,7 @@ public static class ProjectStore
             var blend = layer.BlendMode ?? LayerBlendMode.Normal;
             if (!double.IsFinite(opacity) || opacity < 0 || opacity > 1
                 || !(manifest.Version >= 3 || (opacity == 1 && blend == LayerBlendMode.Normal))
-                || !(layer.IsGroup != true || (opacity == 1 && blend == LayerBlendMode.Normal)))
+                || !(layer.IsGroup != true || (manifest.Version >= 8 && blend == LayerBlendMode.Normal) || (opacity == 1 && blend == LayerBlendMode.Normal)))
                 throw ProjectException.Invalid();
         }
         LayerHierarchy.Validate(manifest.Layers);
@@ -90,7 +92,7 @@ public static class ProjectStore
         var metadata = File.ReadAllBytes(manifestPath);
         var (format, version) = ProjectJson.ReadHeader(metadata);
         if (format != ProjectManifest.FormatIdentifier) throw ProjectException.Invalid();
-        if (version < 1 || version > 7) throw new ProjectException(ProjectErrorKind.Version, version);
+        if (version < 1 || version > ProjectManifest.CurrentVersion) throw new ProjectException(ProjectErrorKind.Version, version);
         var manifest = ProjectJson.ReadManifest(metadata);
         Validate(manifest);
         var images = new Dictionary<Guid, ImageAsset>();

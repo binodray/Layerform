@@ -16,7 +16,7 @@ public sealed partial class EditorSession
     public WarpStroke? WarpStroke => warpStroke;
 
     /// <summary>An explicitly empty selection leaves nothing paintable, so painting never starts.</summary>
-    public bool CanPaint => CanEditLayers && SelectedLayerIds.Count == 1 && (ActiveLayer?.IsGroup == false || IsMaskSelected)
+    public bool CanPaint => CanEditLayers && SelectedLayerIds.Count == 1 && ActiveLayer?.IsLocked == false && (ActiveLayer?.IsGroup == false || IsMaskSelected)
         && Selection?.IsEmpty != true && ActiveLayerId is { } id && EffectiveVisibleIds.Contains(id)
         && (!IsMaskSelected || ActiveLayer?.Mask?.IsEnabled == true) && (IsMaskSelected || ActiveLayer?.Adjustment == null);
 

@@ -65,7 +65,8 @@ public static class Icons
     public static FontIcon Glyph(string glyph, double size = 14) => new() { Glyph = glyph, FontFamily = new FontFamily(FluentFont), FontSize = size };
 
     public const string Add = "", Close = "", Trash = "", Folder = "", Eye = "", EyeOff = "",
-        ChevronDown = "", ChevronRight = "", Link = "", ZoomIn = "", ZoomOut = "", Reset = "";
+        ChevronDown = "", ChevronRight = "", Link = "", ZoomIn = "", ZoomOut = "", Reset = "",
+        Lock = "\uE72E", Unlock = "\uE785";
 
     /// <summary>A Fluent UI System icon (filled outline path) in the hosting control's foreground.</summary>
     public static FrameworkElement Fluent(string data, double size = 18, double viewBox = 24)
@@ -175,6 +176,7 @@ public static class Icons
         NavigationTool.Lasso => session.LassoKind == LassoKind.Polygonal ? LucideIcons.LassoSelect : LucideIcons.Lasso,
         NavigationTool.Wand => LucideIcons.WandSparkles,
         NavigationTool.Crop => LucideIcons.Crop,
+        NavigationTool.Slice => "<rect x=\"3\" y=\"3\" width=\"8\" height=\"8\"></rect><rect x=\"13\" y=\"3\" width=\"8\" height=\"8\"></rect><rect x=\"3\" y=\"13\" width=\"8\" height=\"8\"></rect><rect x=\"13\" y=\"13\" width=\"8\" height=\"8\"></rect>",
         NavigationTool.Brush => session.BrushMode == BrushToolMode.Erase ? LucideIcons.Eraser : LucideIcons.Paintbrush,
         NavigationTool.SpotHealing => LucideIcons.Bandage,
         NavigationTool.CloneStamp => LucideIcons.Stamp,
@@ -185,6 +187,7 @@ public static class Icons
             Model.ShapeKind.Polygon => LucideIcons.Pentagon, Model.ShapeKind.Star => LucideIcons.Star, _ => LucideIcons.Square,
         },
         NavigationTool.Gradient => LucideIcons.Blend,
+        NavigationTool.Type => "<polyline points=\"4 7 4 4 20 4 20 7\"></polyline><line x1=\"9\" x2=\"15\" y1=\"20\" y2=\"20\"></line><line x1=\"12\" x2=\"12\" y1=\"4\" y2=\"20\"></line>",
         NavigationTool.Eyedropper => LucideIcons.Pipette,
         NavigationTool.Hand => LucideIcons.Hand,
         _ => LucideIcons.ZoomIn,

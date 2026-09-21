@@ -207,6 +207,7 @@ public sealed class LayersPanel : UserControl
         bool canAppearance = s?.CanEditAppearance == true;
         appearance.IsHitTestVisible = canAppearance;
         appearance.Opacity = canAppearance ? 1 : 0.45;
+        blend.IsEnabled = s?.CanEditBlendAppearance == true;
         bool canEdit = s?.CanEditLayers == true;
         newLayer.IsEnabled = canEdit;
         newFolder.IsEnabled = canEdit;
@@ -426,6 +427,7 @@ internal sealed class LayerRow : UserControl
     private readonly Border maskThumbnail = new() { CornerRadius = new CornerRadius(3), BorderBrush = new SolidColorBrush(Colors.DodgerBlue) };
     private readonly TextBlock disabledMark = new() { Text = "╱", FontSize = 30, Foreground = new SolidColorBrush(Colors.Red), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false };
     private readonly Button link = new() { Width = 12, Height = 20, Padding = new Thickness(0), Background = new SolidColorBrush(Colors.Transparent), BorderThickness = new Thickness(0), MinWidth = 0 };
+    private readonly Button lockButton = new() { Width = 22, Height = 28, Padding = new Thickness(0), Background = new SolidColorBrush(Colors.Transparent), BorderThickness = new Thickness(0), MinWidth = 0 };
     private readonly TextBlock name = new() { FontSize = 13, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly TextBox renameBox = new() { FontSize = 13, Visibility = Visibility.Collapsed, MinWidth = 0, Padding = new Thickness(4, 2, 4, 2) };
     private readonly TextBlock detail = new() { FontSize = 10, TextTrimming = TextTrimming.CharacterEllipsis };
@@ -450,8 +452,9 @@ internal sealed class LayerRow : UserControl
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(22) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetColumnSpan(background, 8);
+        Grid.SetColumnSpan(background, 9);
         grid.Children.Add(background);
         Place(eye, 1);
         Place(disclosure, 3);
@@ -468,14 +471,15 @@ internal sealed class LayerRow : UserControl
         maskThumbnail.HorizontalAlignment = HorizontalAlignment.Center;
         maskThumbnail.VerticalAlignment = VerticalAlignment.Center;
         Place(maskSlot, 6);
+        Place(lockButton, 7);
         var text = new StackPanel { Margin = new Thickness(5, 9, 8, 0), Spacing = 3 };
         text.Children.Add(name);
         text.Children.Add(renameBox);
         text.Children.Add(detail);
         detail.Foreground = Ui.Secondary;
-        Place(text, 7);
+        Place(text, 8);
         var edge = new Border { Height = 1, Background = Ui.Solid(15, 255, 255, 255), VerticalAlignment = VerticalAlignment.Bottom, IsHitTestVisible = false };
-        Grid.SetColumnSpan(edge, 8);
+        Grid.SetColumnSpan(edge, 9);
         grid.Children.Add(edge);
         Content = grid;
 
@@ -490,6 +494,7 @@ internal sealed class LayerRow : UserControl
         eye.AddHandler(PointerCaptureLostEvent, new PointerEventHandler((_, _) => panel.EndSwipe()), true);
         disclosure.Click += (_, _) => Session?.ToggleGroupExpansion(LayerId);
         link.Click += (_, _) => Session?.ToggleMaskLink(LayerId);
+        lockButton.Click += (_, _) => Session?.ToggleLayerLock(LayerId);
         thumbnail.PointerPressed += (_, e) => ThumbnailPressed(e, mask: false);
         maskThumbnail.PointerPressed += (_, e) => ThumbnailPressed(e, mask: true);
         grid.PointerPressed += RowPressed;
@@ -542,6 +547,7 @@ internal sealed class LayerRow : UserControl
         menu.Items.Add(new MenuFlyoutSeparator());
         Item("Rename…", s => { if (!s.CanEditLayers) return; s.ActiveLayerId = LayerId; s.RenamingLayerId = LayerId; BeginRenaming(s); });
         Item("Hide/Show Layer", s => s.ToggleLayerVisibility(LayerId));
+        Item("Lock/Unlock Layer", s => s.ToggleLayerLock(LayerId));
         Item("Add White Mask", s => { s.SelectLayerTarget(LayerId, false); s.AddMask(); });
         Item("Add Black Mask", s => { s.SelectLayerTarget(LayerId, false); s.AddMask(revealing: false); });
         Item("Enable/Disable Mask", s => { s.SelectLayerTarget(LayerId, false); s.ToggleLayerMask(); });
@@ -648,6 +654,11 @@ internal sealed class LayerRow : UserControl
         eye.Content = Icons.Glyph(layer.IsVisible ? Icons.Eye : Icons.EyeOff, 13);
         eye.IsEnabled = s.CanEditLayers;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(eye, $"{(layer.IsVisible ? "Hide" : "Show")} {layer.Name}");
+        lockButton.Content = Icons.Glyph(layer.IsLocked ? Icons.Lock : Icons.Unlock, 12);
+        lockButton.Opacity = layer.IsLocked ? 1 : 0.35;
+        lockButton.IsEnabled = s.CanEditLayers;
+        ToolTipService.SetToolTip(lockButton, layer.IsLocked ? $"Unlock {layer.Name}" : $"Lock {layer.Name}");
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(lockButton, layer.IsLocked ? $"Unlock {layer.Name}" : $"Lock {layer.Name}");
         var canvas = s.Document?.Size ?? new SizeD(1, 1);
         double scale = XamlRoot?.RasterizationScale ?? 2;
         bool framed = layer.Adjustment == null && !layer.IsGroup;
@@ -690,6 +701,7 @@ internal sealed class LayerRow : UserControl
         }
         else detail.Text = layer.Adjustment != null ? "Adjustment · Double-click to edit" : layer.IsGroup ? "Folder"
             : $"{(int)Math.Round(layer.Size.Width)} × {(int)Math.Round(layer.Size.Height)} px";
+        if (layer.IsLocked) detail.Text = "Locked · " + detail.Text;
         Opacity = visible ? 1 : 0.35;
     }
 

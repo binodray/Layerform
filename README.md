@@ -19,6 +19,12 @@ The installer sets Layer Form up for your user account, with no administrator pr
 > [!NOTE]
 > The installer isn't code-signed yet, so Windows SmartScreen may show "Windows protected your PC" the first time. Choose **More info › Run anyway**.
 
+<p align="center">
+  <img src="docs/assets/layer-form-devices.webp" alt="Layer Form running on desktop and laptop displays" width="900">
+</p>
+
+Layer Form 1.2.0 adds live editable text and a Character panel, rulers and layout grids, slice export, folder duplication and opacity, Soft Light blending, custom layers, layer locking, a customizable toolbar, and a keyboard-shortcuts editor.
+
 ## Why Layer Form?
 
 Layer Form brings the editing model of [Compositor](https://github.com/robbietilton/Compositor) to Windows with a native Windows interface and a new platform implementation. It is designed for familiar, direct image-editing work: arrange layers, isolate subjects, retouch pixels, make color adjustments and export a finished composite.
@@ -150,4 +156,3 @@ Layer Form is an independent community project and is not an official Wonder Ass
 ## License
 
 MIT. See [LICENSE](LICENSE).
-

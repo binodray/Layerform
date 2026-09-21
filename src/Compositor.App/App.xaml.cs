@@ -1,9 +1,11 @@
 using Microsoft.UI.Xaml;
+using Microsoft.Windows.AppLifecycle;
 
 namespace Compositor.App;
 
 public partial class App : Application
 {
+    private const string InstanceKey = "LayerForm.PrimaryInstance";
     private MainWindow? window;
 
     public App()
@@ -17,8 +19,24 @@ public partial class App : Application
         };
     }
 
-    protected override void OnLaunched(LaunchActivatedEventArgs args)
+    protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        var current = AppInstance.GetCurrent();
+        var primary = AppInstance.FindOrRegisterForKey(InstanceKey);
+        if (!primary.IsCurrent)
+        {
+            await primary.RedirectActivationToAsync(current.GetActivatedEventArgs());
+            Exit();
+            return;
+        }
+
+        primary.Activated += (_, _) =>
+        {
+            var existing = window;
+            if (existing == null) return;
+            existing.DispatcherQueue.TryEnqueue(existing.ActivateExistingInstance);
+        };
+
         var files = Environment.GetCommandLineArgs().Skip(1).Where(a => !a.StartsWith("--")).ToArray();
         window = new MainWindow(files);
         window.Activate();

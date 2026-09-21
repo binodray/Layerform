@@ -634,6 +634,11 @@ public sealed partial class EditorSession
         if (document == null) return (Array.Empty<double>(), Array.Empty<double>());
         var xs = new List<double> { 0, document.Width / 2.0, document.Width };
         var ys = new List<double> { 0, document.Height / 2.0, document.Height };
+        if (ShowsLayoutGrid && SnapsToLayoutGrid)
+        {
+            for (double x = GridSpacing; x < document.Width; x += GridSpacing) xs.Add(x);
+            for (double y = GridSpacing; y < document.Height; y += GridSpacing) ys.Add(y);
+        }
         foreach (var layer in document.RenderLayers().Where(l => l.Asset != null && !moving.Contains(l.Id)))
         {
             var corners = DisplayedTransform(layer).Corners();
@@ -663,6 +668,11 @@ public sealed partial class EditorSession
         if (document == null) return (Array.Empty<double>(), Array.Empty<double>());
         var xs = new List<double> { 0, document.Width };
         var ys = new List<double> { 0, document.Height };
+        if (ShowsLayoutGrid && SnapsToLayoutGrid)
+        {
+            for (double x = GridSpacing; x < document.Width; x += GridSpacing) xs.Add(x);
+            for (double y = GridSpacing; y < document.Height; y += GridSpacing) ys.Add(y);
+        }
         foreach (var layer in document.RenderLayers().Where(l => l.Asset != null))
         {
             var corners = DisplayedTransform(layer).Corners();
@@ -751,11 +761,12 @@ public sealed partial class EditorSession
             Width = m.Width, Height = m.Height, Resolution = m.Resolution ?? 72,
             Layers = m.Layers.Select(r => new ImageLayer
             {
-                Id = r.Id, Asset = snapshot.Images.GetValueOrDefault(r.Id), Name = r.Name, IsVisible = r.IsVisible, Transform = r.Transform,
+                Id = r.Id, Asset = snapshot.Images.GetValueOrDefault(r.Id), Name = r.Name, IsVisible = r.IsVisible, IsLocked = r.IsLocked == true, Transform = r.Transform,
                 ParentId = r.ParentId, IsGroup = r.IsGroup == true, Opacity = r.Opacity ?? 1, BlendMode = r.BlendMode ?? LayerBlendMode.Normal,
                 Mask = snapshot.Mask(r), MaskSourceId = r.MaskSourceId, Adjustment = r.Adjustment,
                 // A layer whose pixels didn't change stays the shape it was.
                 Shape = previous.TryGetValue(r.Id, out var old) && old.Shape is { } s && ReferenceEquals(snapshot.Images.GetValueOrDefault(r.Id)?.Image, s.Image) ? s : null,
+                Text = previous.TryGetValue(r.Id, out var oldText) && oldText.Text is { } t && ReferenceEquals(snapshot.Images.GetValueOrDefault(r.Id)?.Image, t.Image) ? t : null,
             }).ToImmutableList(),
             Selection = null,
         };

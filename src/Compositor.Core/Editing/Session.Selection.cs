@@ -62,6 +62,7 @@ public sealed partial class EditorSession
     public WandSettings WandSettings { get; set; } = new();
     public int SelectionExpandAmount { get; set; } = 1;
     public int SelectionContractAmount { get; set; } = 1;
+    public int SelectionFeatherAmount { get; set; } = 2;
 
     public bool CanEditSelection => CanEditLayers;
 
@@ -218,6 +219,12 @@ public sealed partial class EditorSession
     public bool CanModifySelection => Selection?.IsEmpty == false && CanEditSelection && LassoDraft == null;
     public void ExpandSelection(int amount) => ResizeSelection(amount, "Expand Selection");
     public void ContractSelection(int amount) => ResizeSelection(-amount, "Contract Selection");
+    public void FeatherSelection(int amount)
+    {
+        if (Selection is not { } current || !CanModifySelection || amount is < 1 or > 250) return;
+        double softened = Math.Sqrt(current.Feather * current.Feather + amount * amount);
+        SetSelection(new DocumentSelection(current.SharedPath, current.Antialiased, softened), "Feather Selection");
+    }
 
     private void ResizeSelection(double delta, string name)
     {
@@ -233,7 +240,7 @@ public sealed partial class EditorSession
             result = grown.Op(canvas, SKPathOp.Intersect) ?? new SKPath();
         }
         else result = current.SharedPath.Op(band, SKPathOp.Difference) ?? new SKPath();
-        SetSelection(new DocumentSelection(result, current.Antialiased), name);
+        SetSelection(new DocumentSelection(result, current.Antialiased, current.Feather), name);
     }
 
     public void SelectAll()
@@ -252,7 +259,7 @@ public sealed partial class EditorSession
     {
         if (document == null || Selection is not { } current) return;
         using var canvas = SelectionRaster.Rectangle(new RectD(0, 0, document.Width, document.Height));
-        SetSelection(new DocumentSelection(canvas.Op(current.SharedPath, SKPathOp.Difference) ?? new SKPath(), current.Antialiased), "Inverse");
+        SetSelection(new DocumentSelection(canvas.Op(current.SharedPath, SKPathOp.Difference) ?? new SKPath(), current.Antialiased, current.Feather), "Inverse");
     }
 
     /// <summary>Ctrl-click a mask thumbnail: the mask's black (hidden) areas become the selection.</summary>
@@ -640,12 +647,31 @@ public sealed partial class EditorSession
 
     public void DuplicateActiveLayer()
     {
-        if (!CanEditLayers || ActiveLayer is not { IsGroup: false } layer) return;
-        int index = document!.IndexOf(layer.Id);
-        var copy = layer with { Id = Guid.NewGuid(), Name = $"{layer.Name} copy" };
+        if (!CanEditLayers || ActiveLayer is not { IsLocked: false } layer || document == null) return;
+        int index = document.IndexOf(layer.Id);
         BeginEdit("Duplicate Layer");
-        SetLayers(document.Layers.Insert(index + 1, copy));
-        ActiveLayerId = copy.Id;
+        if (!layer.IsGroup)
+        {
+            var copy = layer with { Id = Guid.NewGuid(), Name = $"{layer.Name} copy" };
+            SetLayers(document.Layers.Insert(index + 1, copy));
+            ActiveLayerId = copy.Id;
+        }
+        else
+        {
+            var ids = DescendantIds(layer.Id); ids.Add(layer.Id);
+            var branch = document.Layers.Where(l => ids.Contains(l.Id)).ToList();
+            if (branch.Any(l => l.IsLocked)) { EndEdit(); return; }
+            var remap = branch.ToDictionary(l => l.Id, _ => Guid.NewGuid());
+            var copies = branch.Select(item => item with
+            {
+                Id = remap[item.Id], Name = item.Id == layer.Id ? $"{item.Name} copy" : item.Name,
+                ParentId = item.ParentId is { } p && remap.TryGetValue(p, out var newParent) ? newParent : item.ParentId,
+                MaskSourceId = item.MaskSourceId is { } source && remap.TryGetValue(source, out var newSource) ? newSource : item.MaskSourceId,
+            }).ToList();
+            int insertion = document.Layers.FindLastIndex(l => ids.Contains(l.Id)) + 1;
+            SetLayers(document.Layers.InsertRange(insertion, copies));
+            ActiveLayerId = remap[layer.Id];
+        }
         EndEdit();
     }
 

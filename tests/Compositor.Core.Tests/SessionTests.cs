@@ -65,6 +65,67 @@ public class SessionTests
     }
 
     [Fact]
+    public void LockedLayerRejectsEditsAndRoundTripsThroughSnapshot()
+    {
+        var s = NewSession();
+        var id = s.ActiveLayerId!.Value;
+        s.ToggleLayerLock(id);
+        Assert.True(s.ActiveLayer!.IsLocked);
+        Assert.False(s.CanPaint);
+        Assert.False(s.CanTransform);
+        s.RenameLayer(id, "Changed");
+        Assert.Equal("Layer 1", s.ActiveLayer.Name);
+
+        var snapshot = s.ProjectSnapshot()!;
+        Assert.True(snapshot.Manifest.Layers.Single().IsLocked);
+        var reopened = new EditorSession();
+        reopened.InstallProject(snapshot, "locked.lform");
+        Assert.True(reopened.ActiveLayer!.IsLocked);
+
+        reopened.ToggleLayerLock(id);
+        reopened.RenameLayer(id, "Changed");
+        Assert.Equal("Changed", reopened.ActiveLayer!.Name);
+    }
+
+    [Fact]
+    public void EditableTextRendersRecolorsAndRoundTripsMetadata()
+    {
+        var s = NewSession(500, 300);
+        var style = new LayerTextStyle
+        {
+            Content = "Hello\nLayer Form", FontName = "Arial", FontSize = 48,
+            Red = 1, Green = 0.2, Blue = 0.1, Alignment = LayerTextAlignment.Center,
+            Tracking = 2, Leading = 60, BoxSize = new SizeD(360, 160),
+        };
+        Assert.True(s.AddTextLayer(style, new PointD(20, 30)));
+        Assert.NotNull(s.ActiveLayer!.LiveText);
+        Assert.NotNull(s.ActiveLayer.Asset);
+        Assert.True(s.RecolorText(new PaletteColor(0, 0, 1)));
+        Assert.Equal(1, s.ActiveLayer!.LiveText!.Style.Blue);
+
+        var manifest = s.ProjectSnapshot()!.Manifest;
+        var decoded = ProjectJson.ReadManifest(ProjectJson.WriteManifest(manifest));
+        Assert.Equal("Hello\nLayer Form", decoded.Layers.Last().Text!.Content);
+        Assert.Equal(new SizeD(360, 160), decoded.Layers.Last().Text!.BoxSize);
+    }
+
+    [Fact]
+    public void FolderOpacityAndDuplicationIncludeTheWholeBranch()
+    {
+        var s = NewSession();
+        s.GroupSelectedLayers();
+        var folder = s.ActiveLayer!;
+        Assert.True(folder.IsGroup);
+        s.SetLayerOpacity(0.5);
+        Assert.Equal(0.5, s.ActiveLayer!.Opacity);
+        int before = s.Document!.Layers.Count;
+        s.DuplicateActiveLayer();
+        Assert.True(s.ActiveLayer!.IsGroup);
+        Assert.Equal(before * 2, s.Document!.Layers.Count);
+        Assert.Equal(0.5, s.ActiveLayer.Opacity);
+    }
+
+    [Fact]
     public void BrushStrokePaintsTheForegroundColourAsOneUndoStep()
     {
         var s = NewSession();

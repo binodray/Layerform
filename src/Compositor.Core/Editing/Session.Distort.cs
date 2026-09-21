@@ -410,7 +410,7 @@ public sealed partial class EditorSession
             {
                 var placement = LayerTransform.PixelToDocument(floating.Original, (int)floating.PixelSize.Width, (int)floating.PixelSize.Height);
                 if (Selection is { } selection && DistortWarp.MapPath(selection.SharedPath, placement, floating.PixelSize, edit.Draft, corners) is { } path)
-                    moved = new DocumentSelection(path, selection.Antialiased);
+                    moved = new DocumentSelection(path, selection.Antialiased, selection.Feather);
             }
             else if (FloatingSelectionTransform(edit) is { } matrix && Selection is { } selection) moved = selection.Transformed(matrix);
             var layers = document.Layers.RemoveAll(l => l.Id == edit.LayerId);

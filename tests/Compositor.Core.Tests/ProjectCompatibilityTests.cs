@@ -244,7 +244,7 @@ public class ProjectCompatibilityTests
     }
 
     [Theory]
-    [InlineData(8)]
+    [InlineData(9)]
     [InlineData(0)]
     public void UnsupportedVersionsAreRejected(int version)
     {
